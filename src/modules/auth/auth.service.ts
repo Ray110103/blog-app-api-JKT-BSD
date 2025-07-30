@@ -6,6 +6,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ForgotPasswordDTO } from "./dto/forgot-password.dto";
 import { LoginDTO } from "./dto/login.dto";
 import { RegisterDTO } from "./dto/register.dto";
+import { ResetPasswordDTO } from "./dto/reset-password.dto";
 
 export class AuthService {
   private prisma: PrismaService;
@@ -107,5 +108,26 @@ export class AuthService {
     );
 
     return { message: "Send Email Success" };
+  };
+
+  resetPassword = async (body: ResetPasswordDTO, authUserId: number) => {
+    const user = await this.prisma.user.findFirst({
+      where: { id: authUserId },
+    });
+
+    if (!user) {
+      throw new ApiError("User Not Found", 400);
+    }
+
+    const hashedPassword = await this.passwordService.hashPassword(
+      body.password
+    );
+
+    await this.prisma.user.update({
+      where: { id: authUserId },
+      data: { password: hashedPassword },
+    });
+
+    return { messaGE: "Reset Password Success" };
   };
 }
