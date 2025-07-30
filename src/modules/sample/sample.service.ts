@@ -1,4 +1,4 @@
-import { ApiError } from "../../utils/apiError";
+import { ApiError } from "../../utils/api-error";
 import { PrismaService } from "../prisma/prisma.service";
 
 export class SampleService {
