@@ -1,4 +1,4 @@
-import { ApiError } from "../../utils/apiError";
+import { ApiError } from "../../utils/api-error";
 import { JwtService } from "../jwt/jwt.service";
 import { MailService } from "../mail/mail.service";
 import { PasswordService } from "../password/password.service";

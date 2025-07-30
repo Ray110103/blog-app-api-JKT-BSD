@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { TokenExpiredError, verify } from "jsonwebtoken";
-import { ApiError } from "../utils/apiError";
+import { ApiError } from "../utils/api-error";
 
 export class JwtMiddleware {
   verifyToken = (secretKey: string) => {
