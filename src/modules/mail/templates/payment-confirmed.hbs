@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+      border-radius: 10px 10px 0 0;
+    }
+    .content {
+      background: #f9f9f9;
+      padding: 30px;
+      border: 1px solid #ddd;
+    }
+    .success-box {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+      padding: 20px;
+      border-radius: 5px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .order-details {
+      background: white;
+      padding: 20px;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>✅ Payment Confirmed!</h1>
+  </div>
+  
+  <div class="content">
+    <p>Hi <strong>{{customerName}}</strong>,</p>
+    
+    <div class="success-box">
+      <h2>🎉 Great News!</h2>
+      <p>Your payment has been confirmed and verified.</p>
+    </div>
+    
+    <div class="order-details">
+      <h3>Order Details</h3>
+      <ul>
+        <li><strong>Order Number:</strong> {{orderNumber}}</li>
+        <li><strong>Total Paid:</strong> Rp {{total}}</li>
+        <li><strong>Status:</strong> Payment Confirmed</li>
+      </ul>
+    </div>
+    
+    <p><strong>Next Step:</strong></p>
+    <p>Your order is now being processed and packed. We'll notify you once it's shipped with tracking information.</p>
+    
+    <p>Thank you for your purchase!</p>
+    
+    <p>Best regards,<br>
+    <strong>TCG Store Team</strong></p>
+  </div>
+  
+  <div class="footer">
+    <p>&copy; {{year}} TCG Store. All rights reserved.</p>
+  </div>
+</body>
+</html>

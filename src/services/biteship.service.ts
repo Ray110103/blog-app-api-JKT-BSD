@@ -1,0 +1,405 @@
+import axios from "axios";
+import { BITESHIP_API_KEY, BITESHIP_BASE_URL, ORIGIN_POSTAL_CODE } from "../config/env";
+
+// Types
+interface BisteshipArea {
+  id: string;
+  name: string;
+  country_name: string;
+  country_code: string;
+  administrative_division_level_1_name: string; // Province
+  administrative_division_level_1_type: string;
+  administrative_division_level_2_name: string; // City
+  administrative_division_level_2_type: string;
+  administrative_division_level_3_name: string;
+  administrative_division_level_3_type: string;
+  postal_code: number;
+  latitude?: number;
+  longitude?: number;
+}
+
+interface BisteshipCourier {
+  available_for_cash_on_delivery: boolean;
+  available_for_proof_of_delivery: boolean;
+  available_for_instant_waybill_id: boolean;
+  available_for_insurance: boolean;
+  company: string;
+  courier_name: string;
+  courier_code: string;
+  courier_service_name: string;
+  courier_service_code: string;
+  description: string;
+  duration: string;
+  shipment_duration_range: string;
+  shipment_duration_unit: string;
+  service_type: string;
+  shipping_type: string;
+  price: number;
+  type: string;
+}
+
+interface Province {
+  province_id: string;
+  province: string;
+}
+
+interface City {
+  city_id: string;
+  province_id: string;
+  province: string;
+  type: string;
+  city_name: string;
+  postal_code: string;
+}
+
+interface CourierResult {
+  code: string;
+  name: string;
+  costs: Array<{
+    service: string;
+    description: string;
+    cost: Array<{
+      value: number;
+      etd: string;
+      note: string;
+    }>;
+  }>;
+}
+
+export class BisteshipService {
+  private baseURL: string;
+  private apiKey: string;
+
+  constructor() {
+    this.baseURL = BITESHIP_BASE_URL;
+    this.apiKey = BITESHIP_API_KEY;
+
+    if (!this.apiKey || this.apiKey === "your_biteship_api_key_here") {
+      console.warn("⚠️ Biteship API key not configured properly");
+    }
+  }
+
+  /**
+   * Get all provinces in Indonesia
+   */
+  async getProvinces(): Promise<Province[]> {
+    try {
+      const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
+        headers: {
+          Authorization: this.apiKey,
+        },
+        params: {
+          countries: "ID",
+          input: "",
+          type: "single",
+        },
+      });
+
+      const areas = response.data.areas as BisteshipArea[];
+
+      // Extract unique provinces
+      const provincesMap = new Map<string, Province>();
+
+      areas.forEach((area) => {
+        const provinceName = area.administrative_division_level_1_name;
+        if (provinceName && !provincesMap.has(provinceName)) {
+          provincesMap.set(provinceName, {
+            province_id: provinceName.toLowerCase().replace(/\s+/g, "-"),
+            province: provinceName,
+          });
+        }
+      });
+
+      const provinces = Array.from(provincesMap.values());
+      console.log(`✅ Fetched ${provinces.length} provinces from Biteship`);
+      
+      return provinces;
+    } catch (error: any) {
+      console.error("❌ Biteship getProvinces error:", error.response?.data || error.message);
+      throw new Error("Failed to fetch provinces from Biteship");
+    }
+  }
+
+  /**
+   * Get cities by province ID (province name in Biteship)
+   */
+  async getCities(provinceId: number | string): Promise<City[]> {
+    try {
+      // Convert province ID to name if needed
+      // Map common province IDs to names (from old RajaOngkir IDs)
+      let searchTerm = "";
+
+      if (typeof provinceId === "number") {
+        const provinceMap: Record<number, string> = {
+          1: "Bali",
+          2: "Bangka Belitung",
+          3: "Banten",
+          4: "Bengkulu",
+          5: "DI Yogyakarta",
+          6: "DKI Jakarta",
+          7: "Gorontalo",
+          8: "Jambi",
+          9: "Jawa Barat",
+          10: "Jawa Tengah",
+          11: "Jawa Timur",
+          12: "Kalimantan Barat",
+          13: "Kalimantan Selatan",
+          14: "Kalimantan Tengah",
+          15: "Kalimantan Timur",
+          16: "Kalimantan Utara",
+          17: "Kepulauan Riau",
+          18: "Lampung",
+          19: "Maluku",
+          20: "Maluku Utara",
+          21: "Nanggroe Aceh Darussalam (NAD)",
+          22: "Nusa Tenggara Barat (NTB)",
+          23: "Nusa Tenggara Timur (NTT)",
+          24: "Papua",
+          25: "Papua Barat",
+          26: "Riau",
+          27: "Sulawesi Barat",
+          28: "Sulawesi Selatan",
+          29: "Sulawesi Tengah",
+          30: "Sulawesi Tenggara",
+          31: "Sulawesi Utara",
+          32: "Sumatera Barat",
+          33: "Sumatera Selatan",
+          34: "Sumatera Utara",
+        };
+        searchTerm = provinceMap[provinceId] || "";
+      } else {
+        searchTerm = provinceId;
+      }
+
+      if (!searchTerm) {
+        throw new Error("Invalid province identifier");
+      }
+
+      const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
+        headers: {
+          Authorization: this.apiKey,
+        },
+        params: {
+          countries: "ID",
+          input: searchTerm,
+          type: "single",
+        },
+      });
+
+      const areas = response.data.areas as BisteshipArea[];
+
+      // Filter and format cities
+      const citiesMap = new Map<string, City>();
+
+      areas
+        .filter((area) => area.administrative_division_level_1_name === searchTerm)
+        .forEach((area) => {
+          const cityName = area.administrative_division_level_2_name || area.name;
+          const cityType = area.administrative_division_level_2_type || "Kota";
+          const provinceName = area.administrative_division_level_1_name;
+          const key = `${cityName}-${area.postal_code}`;
+
+          if (!citiesMap.has(key)) {
+            citiesMap.set(key, {
+              city_id: area.id,
+              province_id: provinceName.toLowerCase().replace(/\s+/g, "-"),
+              province: provinceName,
+              type: cityType,
+              city_name: cityName,
+              postal_code: area.postal_code.toString(),
+            });
+          }
+        });
+
+      const cities = Array.from(citiesMap.values());
+      console.log(`✅ Fetched ${cities.length} cities for ${searchTerm}`);
+      
+      return cities;
+    } catch (error: any) {
+      console.error("❌ Biteship getCities error:", error.response?.data || error.message);
+      throw new Error("Failed to fetch cities from Biteship");
+    }
+  }
+
+  /**
+   * Get all cities (returns major cities)
+   */
+  async getAllCities(): Promise<City[]> {
+    try {
+      const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
+        headers: {
+          Authorization: this.apiKey,
+        },
+        params: {
+          countries: "ID",
+          input: "",
+          type: "single",
+        },
+      });
+
+      const areas = response.data.areas as BisteshipArea[];
+
+      // Extract unique cities (limit to 200 for performance)
+      const citiesMap = new Map<string, City>();
+
+      areas.slice(0, 200).forEach((area) => {
+        const cityName = area.administrative_division_level_2_name || area.name;
+        const cityType = area.administrative_division_level_2_type || "Kota";
+        const provinceName = area.administrative_division_level_1_name;
+        const key = `${cityName}-${area.postal_code}`;
+
+        if (!citiesMap.has(key) && provinceName && cityName) {
+          citiesMap.set(key, {
+            city_id: area.id,
+            province_id: provinceName.toLowerCase().replace(/\s+/g, "-"),
+            province: provinceName,
+            type: cityType,
+            city_name: cityName,
+            postal_code: area.postal_code.toString(),
+          });
+        }
+      });
+
+      const cities = Array.from(citiesMap.values());
+      console.log(`✅ Fetched ${cities.length} cities from Biteship`);
+      
+      return cities;
+    } catch (error: any) {
+      console.error("❌ Biteship getAllCities error:", error.response?.data || error.message);
+      throw new Error("Failed to fetch cities from Biteship");
+    }
+  }
+
+  /**
+   * Calculate shipping cost using postal code
+   */
+  async getShippingCost(params: {
+    destinationPostalCode: string;
+    weight: number;
+    courier: string;
+  }): Promise<CourierResult[]> {
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/v1/rates/couriers`,
+        {
+          origin_postal_code: parseInt(ORIGIN_POSTAL_CODE),
+          destination_postal_code: parseInt(params.destinationPostalCode),
+          couriers: params.courier,
+          items: [
+            {
+              name: "Product",
+              description: "Product item",
+              value: 10000,
+              length: 10,
+              width: 10,
+              height: 10,
+              weight: params.weight,
+              quantity: 1,
+            },
+          ],
+        },
+        {
+          headers: {
+            Authorization: this.apiKey,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const couriers = response.data.pricing as BisteshipCourier[];
+
+      // Format to RajaOngkir-like structure
+      return this.formatCouriersResponse(couriers);
+    } catch (error: any) {
+      console.error("❌ Biteship getShippingCost error:", error.response?.data || error.message);
+      throw new Error("Failed to calculate shipping cost from Biteship");
+    }
+  }
+
+  /**
+   * Get shipping costs for multiple couriers
+   */
+  async getAllCouriersCost(params: {
+    destinationPostalCode: string;
+    weight: number;
+    couriers?: string[];
+  }): Promise<CourierResult[]> {
+    try {
+      const couriers = params.couriers || ["jne", "tiki", "pos"];
+      const courierString = couriers.join(",");
+
+      console.log(`📦 Calculating shipping: ${ORIGIN_POSTAL_CODE} → ${params.destinationPostalCode}, ${params.weight}g`);
+
+      const response = await axios.post(
+        `${this.baseURL}/v1/rates/couriers`,
+        {
+          origin_postal_code: parseInt(ORIGIN_POSTAL_CODE),
+          destination_postal_code: parseInt(params.destinationPostalCode),
+          couriers: courierString,
+          items: [
+            {
+              name: "Product",
+              description: "Product items",
+              value: 10000,
+              length: 10,
+              width: 10,
+              height: 10,
+              weight: params.weight,
+              quantity: 1,
+            },
+          ],
+        },
+        {
+          headers: {
+            Authorization: this.apiKey,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const courierResults = response.data.pricing as BisteshipCourier[];
+      
+      console.log(`✅ Found ${courierResults.length} shipping options`);
+
+      // Format to RajaOngkir-like structure
+      return this.formatCouriersResponse(courierResults);
+    } catch (error: any) {
+      console.error("❌ Biteship getAllCouriersCost error:", error.response?.data || error.message);
+      throw new Error("Failed to calculate shipping costs from Biteship");
+    }
+  }
+
+  /**
+   * Format Biteship response to RajaOngkir-like structure
+   */
+  private formatCouriersResponse(couriers: BisteshipCourier[]): CourierResult[] {
+    const grouped = new Map<string, CourierResult>();
+
+    couriers.forEach((courier) => {
+      const code = courier.courier_code.toLowerCase();
+      const name = courier.courier_name;
+
+      if (!grouped.has(code)) {
+        grouped.set(code, {
+          code: code,
+          name: name,
+          costs: [],
+        });
+      }
+
+      grouped.get(code)!.costs.push({
+        service: courier.courier_service_code,
+        description: courier.courier_service_name,
+        cost: [
+          {
+            value: courier.price,
+            etd: courier.shipment_duration_range || courier.duration,
+            note: courier.description || "",
+          },
+        ],
+      });
+    });
+
+    return Array.from(grouped.values());
+  }
+}

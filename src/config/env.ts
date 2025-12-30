@@ -1,5 +1,21 @@
-import dotenv from "dotenv";
-
-dotenv.config();
-
+export const JWT_SECRET = process.env.JWT_SECRET!;
 export const PORT = process.env.PORT || 8000;
+
+// Cloudinary
+export const CLOUDINARY_CONFIG = {
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
+  api_key: process.env.CLOUDINARY_API_KEY!,
+  api_secret: process.env.CLOUDINARY_API_SECRET!,
+};
+
+// Biteship Configuration
+export const BITESHIP_API_KEY = process.env.BITESHIP_API_KEY || "your_biteship_api_key_here";
+export const BITESHIP_BASE_URL = process.env.BITESHIP_BASE_URL || "https://api.biteship.com";
+
+// Origin Location
+export const ORIGIN_POSTAL_CODE = process.env.ORIGIN_POSTAL_CODE || "11220";
+export const ORIGIN_CITY_NAME = process.env.ORIGIN_CITY_NAME || "Jakarta Barat";
+export const ORIGIN_PROVINCE = process.env.ORIGIN_PROVINCE || "DKI Jakarta";
+
+// Packaging Fee
+export const PACKAGING_FEE = parseInt(process.env.PACKAGING_FEE || "2500");

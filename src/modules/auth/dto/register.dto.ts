@@ -8,8 +8,4 @@ export class RegisterDTO {
     @IsEmail()
     @IsNotEmpty()
     email!: string;
-    
-    @IsString()
-    @IsNotEmpty()
-    password!: string;
 }

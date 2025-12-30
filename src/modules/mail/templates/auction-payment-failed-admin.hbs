@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Auction Payment Failed - Admin Alert</title>
+</head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #ef4444;">[ACTION REQUIRED] Auction Payment Failed</h1>
+  
+  <div style="background: #fee2e2; padding: 20px; border-radius: 8px; margin: 20px 0;">
+    <p><strong>Auction ID:</strong> {{auctionId}}</p>
+    <p><strong>Product:</strong> {{productName}}</p>
+    <p><strong>Winner:</strong> {{winnerName}}</p>
+    <p><strong>Winning Bid:</strong> Rp {{winningBid}}</p>
+  </div>
+  
+  <p><strong>Action Required:</strong></p>
+  <p>Please review this failed auction and decide whether to re-list it.</p>
+  
+  <p style="text-align: center; margin: 30px 0;">
+    <a href="{{adminUrl}}" style="background: #3b82f6; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">Go to Admin Dashboard</a>
+  </p>
+  
+  <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+  <p style="font-size: 12px; color: #6b7280;">© {{year}} TCG Store. All rights reserved.</p>
+</body>
+</html>

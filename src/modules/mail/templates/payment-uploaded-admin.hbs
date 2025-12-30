@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: #ff6b6b;
+      color: white;
+      padding: 30px;
+      text-align: center;
+      border-radius: 10px 10px 0 0;
+    }
+    .content {
+      background: #fff3cd;
+      padding: 30px;
+      border: 1px solid #ffc107;
+    }
+    .order-details {
+      background: white;
+      padding: 20px;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .order-details ul {
+      list-style: none;
+      padding: 0;
+    }
+    .order-details li {
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .button {
+      display: inline-block;
+      background: #28a745;
+      color: white;
+      padding: 12px 30px;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .alert {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚠️ Action Required</h1>
+  </div>
+  
+  <div class="content">
+    <div class="alert">
+      <strong>New Payment Proof Uploaded!</strong>
+    </div>
+    
+    <p>A customer has uploaded payment proof and is waiting for your confirmation.</p>
+    
+    <div class="order-details">
+      <h3>Order Information</h3>
+      <ul>
+        <li><strong>Order Number:</strong> {{orderNumber}}</li>
+        <li><strong>Customer:</strong> {{customerName}}</li>
+        <li><strong>Total Amount:</strong> Rp {{total}}</li>
+      </ul>
+      
+      <h3>Payment Details</h3>
+      <ul>
+        <li><strong>Bank:</strong> {{bankName}}</li>
+        <li><strong>Account Number:</strong> {{accountNumber}}</li>
+        <li><strong>Account Name:</strong> {{accountName}}</li>
+      </ul>
+    </div>
+    
+    <p><strong>Action Required:</strong></p>
+    <p>Please verify the payment proof and confirm or reject the payment.</p>
+    
+    <a href="{{adminUrl}}/orders/{{orderNumber}}" class="button">View Order & Verify Payment</a>
+  </div>
+  
+  <div class="footer">
+    <p>&copy; {{year}} TCG Store Admin Panel.</p>
+  </div>
+</body>
+</html>

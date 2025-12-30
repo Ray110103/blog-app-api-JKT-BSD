@@ -5,7 +5,10 @@ import { ApiError } from "../utils/api-error";
 
 export const validateBody = (dtoClass: any) => {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const dtoInstance = plainToInstance(dtoClass, req.body);
+    // ⭐ ADD: Enable transformation
+    const dtoInstance = plainToInstance(dtoClass, req.body, {
+      enableImplicitConversion: true,
+    });
 
     const errors = await validate(dtoInstance);
 
@@ -16,6 +19,9 @@ export const validateBody = (dtoClass: any) => {
 
       throw new ApiError(message, 400);
     }
+
+    // ⭐ ADD: Replace req.body with transformed instance
+    req.body = dtoInstance;
 
     next();
   };
