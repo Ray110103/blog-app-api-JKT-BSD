@@ -8,6 +8,8 @@
     "strict": true,                                      /* Enable all strict type-checking options. */
     "skipLibCheck": true,   
     "experimentalDecorators": true,                       /*CLASS VALIDATOR, CLASS TRANSFORMER, REFLET METADATA  */
-    "emitDecoratorMetadata": true                           /*CLASS VALIDATOR, CLASS TRANSFORMER, REFLET METADATA  */
-  }
+    "emitDecoratorMetadata": true,                           /*CLASS VALIDATOR, CLASS TRANSFORMER, REFLET METADATA  */
+    "typeRoots": ["./node_modules/@types", "./src/types"]
+  },
+  "include": ["src/**/*"]
 }
