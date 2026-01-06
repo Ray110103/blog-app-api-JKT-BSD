@@ -38,6 +38,54 @@ export class BlogService {
     });
   };
 
+  getAllPostsPaginated = async (
+    isAdmin: boolean = false,
+    pagination?: { page?: number; limit?: number; skip?: number }
+  ) => {
+    const where = isAdmin ? {} : { published: true };
+    const limit = pagination?.limit ?? 20;
+    const skip =
+      pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const [posts, total] = await this.prisma.$transaction([
+      this.prisma.blogPost.findMany({
+        where,
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              pictureProfile: true,
+            },
+          },
+          _count: {
+            select: { comments: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.blogPost.count({ where }),
+    ]);
+
+    return {
+      posts,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  };
+
   /**
    * Get single blog post by slug
    */
