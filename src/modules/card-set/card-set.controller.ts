@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { CardSetService } from "./card-set.service";
+import { ApiError } from "../../utils/api-error";
 
 export class CardSetController {
   private cardSetService: CardSetService;
@@ -8,11 +9,13 @@ export class CardSetController {
     this.cardSetService = new CardSetService();
   }
 
-  // ⭐ UPDATED: Parse languageId from query
+  // ⭐ EXISTING: Get all sets (with optional language filter)
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const filters = {
-        languageId: req.query.languageId ? Number(req.query.languageId) : undefined,
+        languageId: req.query.languageId
+          ? Number(req.query.languageId)
+          : undefined,
       };
 
       const sets = await this.cardSetService.getAll(filters);
@@ -22,6 +25,46 @@ export class CardSetController {
     }
   };
 
+  // ⭐ NEW: Get sets by game
+  getByGame = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const gameId = req.query.gameId ? Number(req.query.gameId) : undefined;
+      const languageId = req.query.languageId
+        ? Number(req.query.languageId)
+        : undefined;
+
+      if (!gameId) {
+        throw new ApiError("gameId query parameter is required", 400);
+      }
+
+      const sets = await this.cardSetService.getByGame(gameId, languageId);
+      res.status(200).json(sets);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ⭐ NEW: Get sets grouped by language
+  getGroupedByLanguage = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const gameId = req.query.gameId ? Number(req.query.gameId) : undefined;
+
+      if (!gameId) {
+        throw new ApiError("gameId query parameter is required", 400);
+      }
+
+      const grouped = await this.cardSetService.getGroupedByLanguage(gameId);
+      res.status(200).json(grouped);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ⭐ EXISTING: Get by slug
   getBySlug = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { slug } = req.params;
@@ -32,6 +75,7 @@ export class CardSetController {
     }
   };
 
+  // ⭐ EXISTING: Create (unchanged)
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const thumbnail = req.file;
@@ -42,6 +86,7 @@ export class CardSetController {
     }
   };
 
+  // ⭐ EXISTING: Update (unchanged)
   update = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { slug } = req.params;
@@ -53,6 +98,7 @@ export class CardSetController {
     }
   };
 
+  // ⭐ EXISTING: Delete (unchanged)
   delete = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { slug } = req.params;

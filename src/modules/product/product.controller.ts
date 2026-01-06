@@ -26,9 +26,18 @@ export class ProductController {
         accessoryCategoryId: req.query.accessoryCategoryId
           ? Number(req.query.accessoryCategoryId)
           : undefined,
-        minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined, // ⭐ ADD
-        maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined, // ⭐ ADD
+        minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
+        maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
+        search: req.query.search as string | undefined,
+
+        // ⭐ NEW: Pagination & Sorting
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+        skip: req.query.skip ? Number(req.query.skip) : undefined,
+        sortBy: req.query.sortBy as string | undefined,
+        sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
       };
+
+      console.log("🔍 [ProductController] Filters:", filters);
 
       const products = await this.productService.getAll(filters);
       res.status(200).json(products);

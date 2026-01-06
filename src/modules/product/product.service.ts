@@ -26,11 +26,19 @@ export class ProductService {
     rarityId?: number;
     sealedCategoryId?: number;
     accessoryCategoryId?: number;
-    minPrice?: number; // ⭐ NEW
-    maxPrice?: number; // ⭐ NEW
+    minPrice?: number;
+    maxPrice?: number;
+    search?: string;
+
+    // ⭐ NEW: Pagination & Sorting
+    limit?: number;
+    skip?: number;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
   }) => {
     const where: any = { isActive: true };
 
+    // Basic filters
     if (filters?.productType) where.productType = filters.productType;
     if (filters?.gameId) where.gameId = filters.gameId;
     if (filters?.setId) where.setId = filters.setId;
@@ -40,7 +48,16 @@ export class ProductService {
     if (filters?.accessoryCategoryId)
       where.accessoryCategoryId = filters.accessoryCategoryId;
 
-    // ⭐ NEW: Filter by rarity (nested query)
+    // Search filter (case-insensitive)
+    if (filters?.search) {
+      where.name = {
+        contains: filters.search,
+        mode: "insensitive",
+      };
+      console.log("🔍 [ProductService] Searching for:", filters.search);
+    }
+
+    // Rarity filter (nested query)
     if (filters?.rarityId) {
       where.variants = {
         some: {
@@ -50,9 +67,8 @@ export class ProductService {
       };
     }
 
-    // ⭐ NEW: Filter by price range (nested query on variants)
+    // Price range filter (nested query on variants)
     if (filters?.minPrice !== undefined || filters?.maxPrice !== undefined) {
-      // Combine with existing variants filter if rarity is also set
       if (where.variants) {
         where.variants.some.price = {};
         if (filters.minPrice !== undefined) {
@@ -77,8 +93,25 @@ export class ProductService {
       }
     }
 
+    // ⭐ NEW: Build orderBy dynamically
+    const orderBy: any = {};
+    const sortBy = filters?.sortBy || "createdAt";
+    const sortOrder = filters?.sortOrder || "desc";
+
+    orderBy[sortBy] = sortOrder;
+
+    console.log("🔍 [ProductService] Query params:", {
+      limit: filters?.limit,
+      skip: filters?.skip,
+      sortBy,
+      sortOrder,
+    });
+
     return await this.prisma.product.findMany({
       where,
+      // ⭐ NEW: Add pagination
+      take: filters?.limit,
+      skip: filters?.skip,
       include: {
         game: true,
         set: true,
@@ -99,7 +132,8 @@ export class ProductService {
           select: { reviews: true },
         },
       },
-      orderBy: { createdAt: "desc" },
+      // ⭐ NEW: Dynamic sorting
+      orderBy,
     });
   };
 

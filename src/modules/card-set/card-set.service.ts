@@ -14,11 +14,10 @@ export class CardSetService {
     this.cloudinary = new CloudinaryService();
   }
 
-  // ⭐ UPDATED: Add filters parameter
+  // ⭐ EXISTING: Get all sets with optional language filter
   getAll = async (filters?: { languageId?: number }) => {
     const where: any = { isActive: true };
 
-    // ⭐ NEW: Filter by language if provided
     if (filters?.languageId) {
       where.languageId = filters.languageId;
     }
@@ -29,14 +28,62 @@ export class CardSetService {
         game: { select: { id: true, name: true } },
         language: { select: { id: true, name: true, code: true } },
       },
-      // ⭐ UPDATED: Sort by releaseDate DESC (newest first), then by name
-      orderBy: [
-        { releaseDate: "desc" },
-        { name: "asc" }
-      ],
+      orderBy: [{ releaseDate: "desc" }, { name: "asc" }],
     });
   };
 
+  // ⭐ NEW: Get sets by game (with optional language filter)
+  getByGame = async (gameId: number, languageId?: number) => {
+    const where: any = {
+      gameId,
+      isActive: true,
+    };
+
+    if (languageId) {
+      where.languageId = languageId;
+    }
+
+    return await this.prisma.set.findMany({
+      where,
+      include: {
+        game: { select: { id: true, name: true, slug: true } },
+        language: { select: { id: true, name: true, code: true } },
+        _count: { select: { products: true } },
+      },
+      orderBy: [{ releaseDate: "desc" }, { name: "asc" }],
+    });
+  };
+
+  // ⭐ NEW: Get sets grouped by language (for game detail page)
+  getGroupedByLanguage = async (gameId: number) => {
+    const sets = await this.prisma.set.findMany({
+      where: {
+        gameId,
+        isActive: true,
+      },
+      include: {
+        game: { select: { id: true, name: true, slug: true } },
+        language: { select: { id: true, name: true, code: true } },
+        _count: { select: { products: true } },
+      },
+      orderBy: [{ releaseDate: "desc" }, { name: "asc" }],
+    });
+
+    // Group by language name
+    const grouped: Record<string, typeof sets> = {};
+
+    sets.forEach((set) => {
+      const langName = set.language.name;
+      if (!grouped[langName]) {
+        grouped[langName] = [];
+      }
+      grouped[langName].push(set);
+    });
+
+    return grouped;
+  };
+
+  // ⭐ EXISTING: Get by slug
   getBySlug = async (slug: string) => {
     const set = await this.prisma.set.findFirst({
       where: {
@@ -57,8 +104,8 @@ export class CardSetService {
     return set;
   };
 
+  // ⭐ EXISTING: Create (unchanged)
   create = async (body: CreateCardSetDTO, thumbnail?: Express.Multer.File) => {
-    // Check if game exists and is active
     const game = await this.prisma.game.findFirst({
       where: { id: body.gameId, isActive: true },
     });
@@ -67,7 +114,6 @@ export class CardSetService {
       throw new ApiError("Game not found", 404);
     }
 
-    // Check if language exists and is active
     const language = await this.prisma.language.findFirst({
       where: { id: body.languageId, isActive: true },
     });
@@ -76,7 +122,6 @@ export class CardSetService {
       throw new ApiError("Card language not found", 404);
     }
 
-    // Check if set with same game + language + name already exists (active only)
     const existingSet = await this.prisma.set.findFirst({
       where: {
         gameId: body.gameId,
@@ -93,28 +138,20 @@ export class CardSetService {
       );
     }
 
-    // Generate slug
     let slug = generateSlug(body.name);
     let slugExists = await this.prisma.set.findFirst({
-      where: {
-        slug: slug,
-        isActive: true,
-      },
+      where: { slug: slug, isActive: true },
     });
     let counter = 1;
 
     while (slugExists) {
       slug = `${generateSlug(body.name)}-${counter}`;
       slugExists = await this.prisma.set.findFirst({
-        where: {
-          slug: slug,
-          isActive: true,
-        },
+        where: { slug: slug, isActive: true },
       });
       counter++;
     }
 
-    // Upload thumbnail
     let thumbnailUrl: string | undefined;
 
     if (thumbnail) {
@@ -143,45 +180,38 @@ export class CardSetService {
     });
   };
 
+  // ⭐ EXISTING: Update (unchanged)
   update = async (
     slug: string,
     body: UpdateCardSetDTO,
     thumbnail?: Express.Multer.File
   ) => {
     const set = await this.prisma.set.findFirst({
-      where: {
-        slug: slug,
-        isActive: true,
-      },
+      where: { slug: slug, isActive: true },
     });
 
     if (!set) {
       throw new ApiError("Card set not found", 404);
     }
 
-    // Check if game exists (if provided)
     if (body.gameId) {
       const game = await this.prisma.game.findFirst({
         where: { id: body.gameId, isActive: true },
       });
-
       if (!game) {
         throw new ApiError("Game not found", 404);
       }
     }
 
-    // Check if language exists (if provided)
     if (body.languageId) {
       const language = await this.prisma.language.findFirst({
         where: { id: body.languageId, isActive: true },
       });
-
       if (!language) {
         throw new ApiError("Card language not found", 404);
       }
     }
 
-    // Check if new combination of game + language + name already exists
     if (body.gameId || body.languageId || body.name) {
       const existingSet = await this.prisma.set.findFirst({
         where: {
@@ -201,40 +231,29 @@ export class CardSetService {
       }
     }
 
-    // Generate new slug if name changed
     let newSlug = slug;
     if (body.name && body.name !== set.name) {
       newSlug = generateSlug(body.name);
       let slugExists = await this.prisma.set.findFirst({
-        where: {
-          slug: newSlug,
-          isActive: true,
-          NOT: { id: set.id },
-        },
+        where: { slug: newSlug, isActive: true, NOT: { id: set.id } },
       });
 
       let counter = 1;
       while (slugExists) {
         newSlug = `${generateSlug(body.name)}-${counter}`;
         slugExists = await this.prisma.set.findFirst({
-          where: {
-            slug: newSlug,
-            isActive: true,
-            NOT: { id: set.id },
-          },
+          where: { slug: newSlug, isActive: true, NOT: { id: set.id } },
         });
         counter++;
       }
     }
 
-    // Handle thumbnail upload
     let thumbnailUrl = set.thumbnail;
 
     if (thumbnail) {
       if (set.thumbnail) {
         await this.cloudinary.remove(set.thumbnail);
       }
-
       const { secure_url } = await this.cloudinary.upload(
         thumbnail,
         "sets/thumbnails"
@@ -261,19 +280,16 @@ export class CardSetService {
     });
   };
 
+  // ⭐ EXISTING: Delete (unchanged)
   delete = async (slug: string) => {
     const set = await this.prisma.set.findFirst({
-      where: {
-        slug: slug,
-        isActive: true,
-      },
+      where: { slug: slug, isActive: true },
     });
 
     if (!set) {
       throw new ApiError("Card set not found", 404);
     }
 
-    // Check if set has products
     const productCount = await this.prisma.product.count({
       where: { setId: set.id },
     });
@@ -282,7 +298,6 @@ export class CardSetService {
       throw new ApiError("Cannot delete set with existing products", 400);
     }
 
-    // Soft delete
     await this.prisma.set.update({
       where: { id: set.id },
       data: { isActive: false },

@@ -14,7 +14,6 @@ interface RajaOngkirDestination {
   postal_code?: string;
 }
 
-// ⭐ RajaOngkir Komerce Response Structure
 interface RajaOngkirShippingOption {
   name: string;
   code: string;
@@ -30,9 +29,9 @@ export class RajaOngkirService {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = process.env.RAJAONGKIR_BASE_URL || "https://rajaongkir.komerce.id/api/v1";
+    this.baseUrl =
+      process.env.RAJAONGKIR_BASE_URL || "https://rajaongkir.komerce.id/api/v1";
 
-    // Client for shipping cost calculation
     this.shippingClient = axios.create({
       baseURL: this.baseUrl,
       headers: {
@@ -41,7 +40,6 @@ export class RajaOngkirService {
       },
     });
 
-    // Client for tracking packages
     this.trackingClient = axios.create({
       baseURL: this.baseUrl,
       headers: {
@@ -58,7 +56,6 @@ export class RajaOngkirService {
     try {
       console.log("📍 Fetching provinces from RajaOngkir API...");
 
-      // ⭐ Use multiple search terms to get comprehensive results
       const searchTerms = [
         "jakarta",
         "jawa",
@@ -74,27 +71,30 @@ export class RajaOngkirService {
       const allDestinations: RajaOngkirDestination[] = [];
       const provincesMap = new Map<string, any>();
 
-      // Fetch data for each search term
       for (const term of searchTerms) {
         try {
-          const response = await this.shippingClient.get("/destination/domestic-destination", {
-            params: {
-              search: term,
-              limit: 500,
-              offset: 0,
-            },
-          });
+          const response = await this.shippingClient.get(
+            "/destination/domestic-destination",
+            {
+              params: {
+                search: term,
+                limit: 500,
+                offset: 0,
+              },
+            }
+          );
 
           if (response.data.meta.code === 200) {
             allDestinations.push(...response.data.data);
-            console.log(`✅ Fetched ${response.data.data.length} destinations for "${term}"`);
+            console.log(
+              `✅ Fetched ${response.data.data.length} destinations for "${term}"`
+            );
           }
         } catch (error) {
           console.warn(`⚠️ Failed to fetch data for "${term}"`);
         }
       }
 
-      // Extract unique provinces
       allDestinations.forEach((dest) => {
         if (!provincesMap.has(dest.province_name)) {
           provincesMap.set(dest.province_name, {
@@ -108,7 +108,9 @@ export class RajaOngkirService {
         a.province.localeCompare(b.province)
       );
 
-      console.log(`✅ Found ${provinces.length} unique provinces from ${allDestinations.length} destinations`);
+      console.log(
+        `✅ Found ${provinces.length} unique provinces from ${allDestinations.length} destinations`
+      );
       return provinces;
     } catch (error: any) {
       console.error("❌ Error fetching provinces:", error.message);
@@ -146,6 +148,7 @@ export class RajaOngkirService {
 
   /**
    * Search cities/destinations
+   * ⭐ FIXED: Query-priority search with backend filtering
    */
   searchCities = async (filters: SearchCityDto) => {
     try {
@@ -156,27 +159,25 @@ export class RajaOngkirService {
         offset: 0,
       };
 
-      // Build search query
-      const searchTerms: string[] = [];
-
-      if (filters.provinceId) {
-        searchTerms.push(filters.provinceId);
-      }
-
+      // ⭐ STRATEGY: If user searching, use query ONLY (ignore province in API search)
+      // Then filter by province after getting results
       if (filters.query) {
-        searchTerms.push(filters.query);
-      }
-
-      // ⭐ IMPORTANT: search parameter is required, use default if empty
-      if (searchTerms.length > 0) {
-        params.search = searchTerms.join(" ");
+        params.search = filters.query;
+        console.log(`🔎 Searching by query: "${filters.query}"`);
+      } else if (filters.provinceId) {
+        params.search = filters.provinceId;
+        console.log(`🔎 Searching by province: "${filters.provinceId}"`);
       } else {
-        params.search = "indonesia"; // Default search
+        params.search = "indonesia";
+        console.log(`🔎 Default search: "indonesia"`);
       }
 
-      const response = await this.shippingClient.get("/destination/domestic-destination", {
-        params,
-      });
+      const response = await this.shippingClient.get(
+        "/destination/domestic-destination",
+        {
+          params,
+        }
+      );
 
       if (response.data.meta.code !== 200) {
         throw new ApiError(
@@ -185,15 +186,28 @@ export class RajaOngkirService {
         );
       }
 
-      // Transform to standardized format
-      const cities = response.data.data.map((dest: RajaOngkirDestination) => ({
+      let destinations: RajaOngkirDestination[] = response.data.data;
+
+      // ⭐ BACKEND FILTERING: If province filter exists, filter results
+      if (filters.provinceId) {
+        destinations = destinations.filter((dest) =>
+          dest.province_name
+            .toLowerCase()
+            .includes(filters.provinceId!.toLowerCase())
+        );
+        console.log(
+          `✅ Filtered to ${destinations.length} cities in province "${filters.provinceId}"`
+        );
+      }
+
+      // ⭐ Transform to standardized format
+      const cities = destinations.map((dest: RajaOngkirDestination) => ({
         city_id: dest.id,
         province_id: dest.province_name,
         province: dest.province_name,
         type: this.extractCityType(dest.city_name),
-        city_name: this.cleanCityName(dest.city_name),
+        city_name: dest.city_name, // ⭐ Use original city_name (already clean!)
         postal_code: dest.postal_code || "",
-        // Additional info
         label: dest.label,
         district_name: dest.district_name,
         subdistrict_name: dest.subdistrict_name,
@@ -219,7 +233,6 @@ export class RajaOngkirService {
     try {
       console.log("🔍 Fetching city by ID:", cityId);
 
-      // ⭐ Use search with multiple terms
       const searchTerms = [
         "jakarta",
         "jawa",
@@ -232,30 +245,32 @@ export class RajaOngkirService {
         "papua",
       ];
 
-      // Search through all terms to find the city
       for (const term of searchTerms) {
         try {
-          const response = await this.shippingClient.get("/destination/domestic-destination", {
-            params: {
-              search: term,
-              limit: 500,
-              offset: 0,
-            },
-          });
+          const response = await this.shippingClient.get(
+            "/destination/domestic-destination",
+            {
+              params: {
+                search: term,
+                limit: 500,
+                offset: 0,
+              },
+            }
+          );
 
           if (response.data.meta.code === 200) {
-            const dest: RajaOngkirDestination | undefined = response.data.data.find(
-              (d: RajaOngkirDestination) => d.id === cityId
-            );
+            const dest: RajaOngkirDestination | undefined =
+              response.data.data.find(
+                (d: RajaOngkirDestination) => d.id === cityId
+              );
 
             if (dest) {
-              // Found it!
               const city = {
                 city_id: dest.id,
                 province_id: dest.province_name,
                 province: dest.province_name,
                 type: this.extractCityType(dest.city_name),
-                city_name: this.cleanCityName(dest.city_name),
+                city_name: dest.city_name, // ⭐ Use original city_name
                 postal_code: dest.postal_code || "",
                 label: dest.label,
                 district_name: dest.district_name,
@@ -268,12 +283,10 @@ export class RajaOngkirService {
             }
           }
         } catch (error) {
-          // Continue to next search term
           continue;
         }
       }
 
-      // City not found in any search results
       throw new ApiError("City not found", 404);
     } catch (error: any) {
       console.error("❌ Error fetching city:", error.message);
@@ -292,7 +305,6 @@ export class RajaOngkirService {
     try {
       console.log("💰 Calculating shipping cost:", data);
 
-      // Prepare form data
       const formData = new URLSearchParams();
       formData.append("origin", data.originCityId.toString());
       formData.append("destination", data.destinationCityId.toString());
@@ -302,7 +314,10 @@ export class RajaOngkirService {
       console.log("📤 Request endpoint: /calculate/domestic-cost");
       console.log("📤 Request params:", formData.toString());
 
-      const response = await this.shippingClient.post("/calculate/domestic-cost", formData);
+      const response = await this.shippingClient.post(
+        "/calculate/domestic-cost",
+        formData
+      );
 
       console.log("📥 Response:", response.data);
 
@@ -313,7 +328,6 @@ export class RajaOngkirService {
         );
       }
 
-      // ⭐ RajaOngkir Komerce returns array of shipping options directly
       const shippingOptions: RajaOngkirShippingOption[] = response.data.data;
 
       console.log(`✅ Found ${shippingOptions.length} shipping options`);
@@ -333,34 +347,50 @@ export class RajaOngkirService {
     }
   };
 
-  /**
-   * Track package by waybill/resi number
-   */
   trackPackage = async (data: TrackPackageDto) => {
     try {
       console.log("📦 Tracking package:", data.waybill);
 
-      // Prepare form data
-      const formData = new URLSearchParams();
-      formData.append("waybill", data.waybill);
-      formData.append("courier", data.courier.toLowerCase());
+      // ✅ FIXED: Build query parameters
+      const params = new URLSearchParams();
+      params.append("awb", data.waybill);
+      params.append("courier", data.courier.toLowerCase());
+      params.append("last_phone_number", data.lastPhoneNumber); // ✅ REQUIRED: Always send
 
-      const response = await this.trackingClient.post("/waybill", formData);
+      console.log("📤 Request URL:", `/track/waybill?${params.toString()}`);
 
-      if (response.data.status?.code !== 200) {
-        throw new ApiError(
-          response.data.status?.description || "Failed to track package",
-          response.data.status?.code || 500
-        );
+      // ✅ Send as query parameters, not body
+      const response = await this.trackingClient.post(
+        `/track/waybill?${params.toString()}`,
+        {} // Empty body
+      );
+
+      console.log("📥 Response status:", response.data.meta?.code || response.data.status?.code);
+
+      // Handle both response formats
+      if (response.data.meta?.code === 200 || response.data.status?.code === 200) {
+        console.log("✅ Package tracking retrieved successfully");
+        return response.data.data;
       }
 
-      console.log("✅ Package tracking retrieved");
-      return response.data.data;
+      throw new ApiError(
+        response.data.meta?.message || 
+        response.data.status?.description || 
+        "Failed to track package",
+        response.data.meta?.code || 
+        response.data.status?.code || 
+        500
+      );
     } catch (error: any) {
       console.error("❌ Error tracking package:", error.message);
+      console.error("❌ Error response:", error.response?.data);
+      
       if (error instanceof ApiError) throw error;
+      
       throw new ApiError(
-        error.response?.data?.status?.description || "Failed to track package",
+        error.response?.data?.meta?.message ||
+        error.response?.data?.status?.description || 
+        "Failed to track package",
         error.response?.status || 500
       );
     }
@@ -372,14 +402,7 @@ export class RajaOngkirService {
   private extractCityType = (cityName: string): string => {
     if (cityName.toLowerCase().includes("kota")) return "Kota";
     if (cityName.toLowerCase().includes("kabupaten")) return "Kabupaten";
-    return "Kota"; // Default
-  };
-
-  /**
-   * HELPER: Clean city name (remove "Kota" or "Kabupaten" prefix)
-   */
-  private cleanCityName = (cityName: string): string => {
-    return cityName.replace(/^(Kota|Kabupaten)\s+/i, "").trim();
+    return "Kota";
   };
 
   /**
@@ -391,7 +414,6 @@ export class RajaOngkirService {
 
   /**
    * HELPER: Get cheapest shipping option
-   * ⭐ Updated for RajaOngkir Komerce response structure
    */
   getCheapestShipping = (shippingOptions: RajaOngkirShippingOption[]) => {
     if (!shippingOptions || shippingOptions.length === 0) {
@@ -414,7 +436,6 @@ export class RajaOngkirService {
 
   /**
    * HELPER: Get fastest shipping option
-   * ⭐ Updated for RajaOngkir Komerce response structure
    */
   getFastestShipping = (shippingOptions: RajaOngkirShippingOption[]) => {
     if (!shippingOptions || shippingOptions.length === 0) {
@@ -440,14 +461,12 @@ export class RajaOngkirService {
 
   /**
    * HELPER: Get all shipping options with recommendations
-   * ⭐ Updated for RajaOngkir Komerce response structure
    */
   getAllShippingOptions = (shippingOptions: RajaOngkirShippingOption[]) => {
     if (!shippingOptions || shippingOptions.length === 0) {
       return [];
     }
 
-    // Sort by cost (cheapest first)
     return shippingOptions
       .map((option) => ({
         courier: option.name,

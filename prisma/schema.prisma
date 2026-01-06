@@ -9,10 +9,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// =====================================
-// USER & AUTH MODELS (NO CHANGES)
-// =====================================
-
 model User {
   id             Int      @id @default(autoincrement())
   name           String
@@ -62,10 +58,6 @@ enum Role {
   ADMIN
   USER
 }
-
-// =====================================
-// TCG SPECIFIC MODELS (NO CHANGES)
-// =====================================
 
 model Game {
   id          Int      @id @default(autoincrement())
@@ -193,10 +185,6 @@ model AccessoryCategory {
   @@map("accessory_categories")
 }
 
-// =====================================
-// PRODUCT MODELS
-// =====================================
-
 model Product {
   id          Int         @id @default(autoincrement())
   productType ProductType
@@ -287,10 +275,6 @@ model ProductImage {
   @@map("product_images")
 }
 
-// =====================================
-// E-COMMERCE MODELS
-// =====================================
-
 model Address {
   id            Int     @id @default(autoincrement())
   userId        Int
@@ -349,10 +333,6 @@ model CartItem {
   @@map("cart_items")
 }
 
-// =====================================
-// ORDER MODELS (UPDATED)
-// =====================================
-
 model Order {
   id          Int    @id @default(autoincrement())
   orderNumber String @unique
@@ -391,7 +371,7 @@ model Order {
   adminNotes         String? @db.Text
   cancellationReason String? @db.Text
 
-  paymentDeadline DateTime? // ✅ NEW: For auction orders
+  paymentDeadline DateTime? 
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -406,9 +386,9 @@ model Order {
   orderItems    OrderItem[]
   statusHistory OrderStatusHistory[]
   complaints    Complaint[]
-  auctions      Auction[]  // ✅ CHANGED: One-to-many (multiple auctions can link to one order)
+  auctions      Auction[]  
 
-  @@index([paymentDeadline])  // ✅ NEW: For cron job queries
+  @@index([paymentDeadline])  
   @@map("orders")
 }
 
@@ -424,14 +404,14 @@ model OrderItem {
   price     Decimal        @db.Decimal(12, 2)
   subtotal  Decimal        @db.Decimal(12, 2)
 
-  sourceType String? // ✅ NEW: "REGULAR" | "AUCTION"
-  sourceId   Int?    // ✅ NEW: Auction ID if sourceType = "AUCTION"
+  sourceType String? 
+  sourceId   Int?    
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([sourceType])  // ✅ NEW: For filtering
-  @@index([sourceId])    // ✅ NEW: For lookup
+  @@index([sourceType])  
+  @@index([sourceId])    
   @@map("order_items")
 }
 
@@ -477,10 +457,6 @@ enum PaymentStatus {
   REFUNDED
 }
 
-// =====================================
-// AUCTION MODELS (UPDATED)
-// =====================================
-
 model Auction {
   id        Int     @id @default(autoincrement())
   productId Int     // ✅ REMOVED @unique - can have multiple auctions per product
@@ -506,7 +482,7 @@ model Auction {
   winnerId Int?
   winner   User? @relation("AuctionWinner", fields: [winnerId], references: [id])
 
-  orderId Int? // ✅ REMOVED @unique - multiple auctions can link to same order
+  orderId Int? 
   order   Order? @relation(fields: [orderId], references: [id])
 
   isRelisted        Boolean   @default(false)
@@ -525,11 +501,11 @@ model Auction {
   bids     Bid[]
   failures AuctionFailure[]
 
-  @@index([productId])   // ✅ NEW
-  @@index([variantId])   // ✅ NEW
+  @@index([productId])   
+  @@index([variantId])   
   @@index([status])
-  @@index([winnerId])    // ✅ NEW
-  @@index([orderId])     // ✅ NEW
+  @@index([winnerId])    
+  @@index([orderId])     
   @@index([endTime])
   @@index([paymentDeadline])
   @@map("auctions")
@@ -604,10 +580,6 @@ enum AuctionStatus {
   CANCELLED
 }
 
-// =====================================
-// WISHLIST & REVIEW (NO CHANGES)
-// =====================================
-
 model Wishlist {
   id        Int     @id @default(autoincrement())
   userId    Int
@@ -637,10 +609,6 @@ model Review {
   @@unique([userId, productId])
   @@map("reviews")
 }
-
-// =====================================
-// COMPLAINT MODELS (NO CHANGES)
-// =====================================
 
 model Complaint {
   id          Int              @id @default(autoincrement())
@@ -704,10 +672,6 @@ enum ResolutionType {
   REPLACE
   PARTIAL_REFUND
 }
-
-// =====================================
-// BLOG MODELS (NO CHANGES)
-// =====================================
 
 model BlogPost {
   id              Int       @id @default(autoincrement())

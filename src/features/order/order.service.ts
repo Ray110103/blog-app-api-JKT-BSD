@@ -265,10 +265,7 @@ export class OrderService {
     }
 
     if (auctions.length !== data.auctionIds.length) {
-      throw new ApiError(
-        "Some auctions are not available for checkout",
-        400
-      );
+      throw new ApiError("Some auctions are not available for checkout", 400);
     }
 
     console.log(`📊 Previewing checkout for ${auctions.length} auctions`);
@@ -327,9 +324,14 @@ export class OrderService {
 
     console.log(`✅ Found ${shippingOptions.length} shipping options`);
 
-    // 6. Calculate total for each shipping option
+    // ⭐ FIX: Proper mapping dari RajaOngkir response
     const optionsWithTotal = shippingOptions.map((option) => ({
-      ...option,
+      code: option.code, // "jne", "tiki", "pos"
+      courier: option.name, // ⭐ "JNE", "TIKI", "POS Indonesia"
+      service: option.service, // "REG", "YES", "OKE"
+      description: option.description, // "Layanan Reguler"
+      cost: option.cost, // 25000
+      etd: option.etd, // "2-3 hari"
       subtotal,
       packagingFee: this.packagingFee,
       total: subtotal + option.cost + this.packagingFee,
@@ -404,10 +406,7 @@ export class OrderService {
     }
 
     if (auctions.length !== data.auctionIds.length) {
-      throw new ApiError(
-        "Some auctions are not available for checkout",
-        400
-      );
+      throw new ApiError("Some auctions are not available for checkout", 400);
     }
 
     // 2. Get user info for email
@@ -534,7 +533,7 @@ export class OrderService {
             price: auction.currentBid,
             subtotal: Number(auction.currentBid) * auction.quantity,
             sourceType: "AUCTION", // ✅ NEW
-            sourceId: auction.id,   // ✅ NEW
+            sourceId: auction.id, // ✅ NEW
           },
         });
       }
@@ -699,7 +698,8 @@ export class OrderService {
         statusHistory: {
           orderBy: { createdAt: "desc" },
         },
-        auctions: {  // ✅ NEW: Include linked auctions
+        auctions: {
+          // ✅ NEW: Include linked auctions
           select: {
             id: true,
             productId: true,
@@ -763,10 +763,10 @@ export class OrderService {
         quantity: item.quantity,
         price: Number(item.price),
         subtotal: Number(item.subtotal),
-        sourceType: item.sourceType,  // ✅ NEW
-        sourceId: item.sourceId,      // ✅ NEW
+        sourceType: item.sourceType, // ✅ NEW
+        sourceId: item.sourceId, // ✅ NEW
       })),
-      auctions: order.auctions,  // ✅ NEW
+      auctions: order.auctions, // ✅ NEW
       notes: order.notes,
       adminNotes: order.adminNotes,
       cancellationReason: order.cancellationReason,

@@ -89,7 +89,9 @@ export class BidService {
     // 3. Validate bid amount is below buy out price
     if (data.bidAmount >= Number(auction.buyOutPrice)) {
       throw new ApiError(
-        `Bid amount cannot be equal to or higher than buy out price (Rp ${Number(auction.buyOutPrice).toLocaleString("id-ID")}). Please use buy out option instead.`,
+        `Bid amount cannot be equal to or higher than buy out price (Rp ${Number(
+          auction.buyOutPrice
+        ).toLocaleString("id-ID")}). Please use buy out option instead.`,
         400
       );
     }
@@ -98,7 +100,7 @@ export class BidService {
     let minBidAmount: number;
 
     if (auction.lastBidTime === null) {
-      // No bids yet - first bid can equal startPrice
+      // ✅ No bids yet - first bid can equal startPrice
       minBidAmount = Number(auction.startPrice);
     } else {
       // Has bids - must be currentBid + minIncrement
@@ -107,7 +109,9 @@ export class BidService {
 
     if (data.bidAmount < minBidAmount) {
       throw new ApiError(
-        `Bid amount must be at least Rp ${minBidAmount.toLocaleString("id-ID")}`,
+        `Bid amount must be at least Rp ${minBidAmount.toLocaleString(
+          "id-ID"
+        )}`,
         400
       );
     }
@@ -126,7 +130,9 @@ export class BidService {
 
     // 6. Calculate new end time (24 hours from now)
     const newEndTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const paymentDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+    // ❌ REMOVED: paymentDeadline should NOT be set during bidding!
+    // ✅ PaymentDeadline will be set when auction ENDS (in cron job)
 
     // 7. Create bid and update auction
     const bid = await this.prisma.$transaction(async (tx) => {
@@ -157,13 +163,15 @@ export class BidService {
         },
       });
 
+      // ✅ FIXED: Only update currentBid, lastBidTime, and endTime
+      // Do NOT set paymentDeadline here!
       await tx.auction.update({
         where: { id: auctionId },
         data: {
           currentBid: data.bidAmount,
           lastBidTime: new Date(),
-          endTime: newEndTime,
-          paymentDeadline: paymentDeadline,
+          endTime: newEndTime, // ✅ Extend auction 24 hours
+          // ❌ REMOVED: paymentDeadline
         },
       });
 
@@ -171,6 +179,7 @@ export class BidService {
     });
 
     console.log("✅ Bid placed successfully");
+    console.log(`   New endTime: ${newEndTime.toISOString()}`);
 
     // 8. Send outbid email to previous highest bidder (with throttling)
     if (lastBid) {
@@ -230,15 +239,18 @@ export class BidService {
         },
       },
       orderBy: {
-        bidTime: "desc",
+        bidAmount: "desc",
       },
     });
 
     return bids.map((bid) => ({
       id: bid.id,
       bidAmount: Number(bid.bidAmount),
-      bidTime: bid.bidTime,
-      userName: this.maskUsername(bid.user.name),
+      createdAt: bid.bidTime,
+      user: {
+        id: bid.user.id,
+        name: bid.user.name,
+      },
     }));
   };
 
@@ -307,14 +319,18 @@ export class BidService {
   };
 
   /**
-   * Get user's won auctions (pending payment) - UPDATED
+   * ✅ Get user's won auctions (pending payment)
+   * These are auctions where:
+   * - User is the winner
+   * - Status is ENDED
+   * - Not yet linked to an order (orderId = null)
    */
   getWonAuctions = async (userId: number) => {
     const wonAuctions = await this.prisma.auction.findMany({
       where: {
-        winnerId: userId,
-        status: "ENDED",
-        orderId: null, // ✅ Only auctions not yet linked to order
+        winnerId: userId,        // ✅ User is winner
+        status: "ENDED",         // ✅ Auction has ended
+        orderId: null,           // ✅ Not yet paid (no order created)
       },
       include: {
         product: {
@@ -349,11 +365,12 @@ export class BidService {
       winningBid: Number(auction.currentBid),
       endTime: auction.endTime,
       paymentDeadline: auction.paymentDeadline,
+      orderId: auction.orderId, // ✅ Include to check if paid
     }));
   };
 
   /**
-   * Helper: Mask username for privacy
+   * Helper: Mask username for privacy (not used currently)
    */
   maskUsername = (name: string): string => {
     if (name.length <= 3) {
