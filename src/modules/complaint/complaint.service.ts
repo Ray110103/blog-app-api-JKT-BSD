@@ -52,6 +52,69 @@ export class ComplaintService {
     });
   };
 
+  getAllPaginated = async (
+    userId: number,
+    isAdmin: boolean,
+    pagination?: { page?: number; limit?: number; skip?: number }
+  ) => {
+    const where: any = isAdmin ? {} : { userId };
+    const limit = pagination?.limit ?? 20;
+    const skip = pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const [complaints, total] = await this.prisma.$transaction([
+      this.prisma.complaint.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              pictureProfile: true,
+            },
+          },
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              deliveredAt: true,
+              completedAt: true,
+            },
+          },
+          admin: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          photos: true,
+        },
+        orderBy: { createdAt: "desc" },
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.complaint.count({ where }),
+    ]);
+
+    return {
+      complaints,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  };
+
   // ===========================
   // GET COMPLAINT BY ID
   // ===========================
