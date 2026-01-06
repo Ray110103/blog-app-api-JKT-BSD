@@ -652,6 +652,98 @@ export class OrderService {
     }));
   };
 
+  getAllPaginated = async (
+    userId: number,
+    pagination?: { page?: number; limit?: number; skip?: number }
+  ) => {
+    const limit = pagination?.limit ?? 20;
+    const skip = pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const [orders, total] = await this.prisma.$transaction([
+      this.prisma.order.findMany({
+        where: { userId },
+        include: {
+          address: true,
+          orderItems: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  thumbnail: true,
+                  productType: true,
+                },
+              },
+              variant: {
+                select: {
+                  id: true,
+                  price: true,
+                  sku: true,
+                  rarity: {
+                    select: {
+                      name: true,
+                      shortName: true,
+                    },
+                  },
+                  condition: {
+                    select: {
+                      name: true,
+                      shortName: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          _count: {
+            select: { orderItems: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.order.count({ where: { userId } }),
+    ]);
+
+    const transformedOrders = orders.map((order) => ({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentDeadline: order.paymentDeadline,
+      total: Number(order.total),
+      itemCount: order._count.orderItems,
+      createdAt: order.createdAt,
+      items: order.orderItems.map((item) => ({
+        id: item.id,
+        productName: item.product.name,
+        productImage: item.product.thumbnail,
+        quantity: item.quantity,
+        price: Number(item.price),
+        subtotal: Number(item.subtotal),
+        sourceType: item.sourceType,
+      })),
+    }));
+
+    return {
+      orders: transformedOrders,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  };
+
   /**
    * Get order by order number
    */
