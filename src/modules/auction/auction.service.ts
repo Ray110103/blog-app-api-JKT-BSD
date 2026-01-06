@@ -1024,6 +1024,81 @@ export class AuctionService {
     }));
   };
 
+  getFailedPaymentsPaginated = async (pagination?: {
+    page?: number;
+    limit?: number;
+    skip?: number;
+  }) => {
+    const where = { status: "PAYMENT_FAILED" as const };
+    const limit = pagination?.limit ?? 20;
+    const skip = pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const [failedAuctions, total] = await this.prisma.$transaction([
+      this.prisma.auction.findMany({
+        where,
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              thumbnail: true,
+            },
+          },
+          variant: {
+            select: {
+              id: true,
+              rarity: {
+                select: {
+                  name: true,
+                  shortName: true,
+                },
+              },
+              condition: {
+                select: {
+                  name: true,
+                  shortName: true,
+                },
+              },
+            },
+          },
+          winner: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.auction.count({ where }),
+    ]);
+
+    return {
+      auctions: failedAuctions.map((auction) => ({
+        ...this.formatAuctionResponse(auction),
+        winner: auction.winner,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  };
+
   getBidHistory = async (auctionId: number) => {
     // Verify auction exists
     const auction = await this.prisma.auction.findUnique({
