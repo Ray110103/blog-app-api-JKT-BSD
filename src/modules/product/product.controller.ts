@@ -12,6 +12,30 @@ export class ProductController {
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const rawPage = req.query.page;
+      const rawLimit = req.query.limit ?? req.query.take;
+      const rawSkip = req.query.skip;
+
+      const hasPagination =
+        rawPage !== undefined || rawLimit !== undefined || rawSkip !== undefined;
+
+      const page = rawPage !== undefined ? Number(rawPage) : undefined;
+      const limit = rawLimit !== undefined ? Number(rawLimit) : undefined;
+      const skip = rawSkip !== undefined ? Number(rawSkip) : undefined;
+
+      if (page !== undefined && (!Number.isFinite(page) || page < 1)) {
+        throw new ApiError("Invalid `page` query param", 400);
+      }
+      if (
+        limit !== undefined &&
+        (!Number.isFinite(limit) || limit < 1 || limit > 100)
+      ) {
+        throw new ApiError("Invalid `limit` query param", 400);
+      }
+      if (skip !== undefined && (!Number.isFinite(skip) || skip < 0)) {
+        throw new ApiError("Invalid `skip` query param", 400);
+      }
+
       const filters = {
         productType: req.query.productType as ProductType,
         gameId: req.query.gameId ? Number(req.query.gameId) : undefined,
@@ -30,14 +54,24 @@ export class ProductController {
         maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
         search: req.query.search as string | undefined,
 
-        // ⭐ NEW: Pagination & Sorting
-        limit: req.query.limit ? Number(req.query.limit) : undefined,
-        skip: req.query.skip ? Number(req.query.skip) : undefined,
+        // ⭐ Pagination & Sorting
+        page,
+        limit,
+        skip,
         sortBy: req.query.sortBy as string | undefined,
         sortOrder: (req.query.sortOrder as "asc" | "desc") || "desc",
       };
 
       console.log("🔍 [ProductController] Filters:", filters);
+
+      if (hasPagination) {
+        const result = await this.productService.getAllPaginated(filters);
+        res.status(200).json({
+          data: result.products,
+          pagination: result.pagination,
+        });
+        return;
+      }
 
       const products = await this.productService.getAll(filters);
       res.status(200).json(products);

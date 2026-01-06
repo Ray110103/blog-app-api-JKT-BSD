@@ -6,6 +6,7 @@ import { CreateVariantDTO } from "./dto/create-variant.dto";
 import { generateSlug } from "../../utils/generate-slug";
 import { UpdateProductDTO } from "./dto/update-variant.dto";
 import { UpdateVariantDTO } from "./dto/update-product.dto";
+import { Prisma } from "../../generated/prisma";
 
 export class ProductService {
   private prisma: PrismaService;
@@ -16,9 +17,7 @@ export class ProductService {
     this.cloudinary = new CloudinaryService();
   }
 
-  // ⭐ ADD TO: ProductService.getAll() method
-
-  getAll = async (filters?: {
+  private buildWhere = (filters?: {
     productType?: ProductType;
     gameId?: number;
     setId?: number;
@@ -29,12 +28,6 @@ export class ProductService {
     minPrice?: number;
     maxPrice?: number;
     search?: string;
-
-    // ⭐ NEW: Pagination & Sorting
-    limit?: number;
-    skip?: number;
-    sortBy?: string;
-    sortOrder?: "asc" | "desc";
   }) => {
     const where: any = { isActive: true };
 
@@ -93,48 +86,144 @@ export class ProductService {
       }
     }
 
-    // ⭐ NEW: Build orderBy dynamically
-    const orderBy: any = {};
+    return where;
+  };
+
+  private buildOrderBy = (filters?: {
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+  }) => {
+    const allowedSortBy = new Set([
+      "createdAt",
+      "updatedAt",
+      "name",
+      "id",
+      "weight",
+    ]);
+
     const sortBy = filters?.sortBy || "createdAt";
     const sortOrder = filters?.sortOrder || "desc";
 
+    if (!allowedSortBy.has(sortBy)) {
+      throw new ApiError("Invalid `sortBy` query param", 400);
+    }
+
+    const orderBy: any = {};
     orderBy[sortBy] = sortOrder;
+    return orderBy;
+  };
+
+  private productInclude: Prisma.ProductInclude = {
+    game: true,
+    set: true,
+    language: true,
+    sealedCategory: true,
+    accessoryCategory: true,
+    images: {
+      orderBy: [{ isMain: "desc" }, { createdAt: "asc" }],
+    },
+    variants: {
+      where: { isActive: true },
+      include: {
+        rarity: true,
+        condition: true,
+      },
+    },
+    _count: {
+      select: { reviews: true },
+    },
+  };
+
+  getAll = async (filters?: {
+    productType?: ProductType;
+    gameId?: number;
+    setId?: number;
+    languageId?: number;
+    rarityId?: number;
+    sealedCategoryId?: number;
+    accessoryCategoryId?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    search?: string;
+
+    // ⭐ Pagination & Sorting
+    limit?: number;
+    skip?: number;
+    page?: number;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+  }) => {
+    const where = this.buildWhere(filters);
+    const orderBy = this.buildOrderBy(filters);
 
     console.log("🔍 [ProductService] Query params:", {
       limit: filters?.limit,
       skip: filters?.skip,
-      sortBy,
-      sortOrder,
+      sortBy: filters?.sortBy || "createdAt",
+      sortOrder: filters?.sortOrder || "desc",
     });
 
     return await this.prisma.product.findMany({
       where,
-      // ⭐ NEW: Add pagination
+      // ⭐ Pagination
       take: filters?.limit,
       skip: filters?.skip,
-      include: {
-        game: true,
-        set: true,
-        language: true,
-        sealedCategory: true,
-        accessoryCategory: true,
-        images: {
-          orderBy: [{ isMain: "desc" }, { createdAt: "asc" }],
-        },
-        variants: {
-          where: { isActive: true },
-          include: {
-            rarity: true,
-            condition: true,
-          },
-        },
-        _count: {
-          select: { reviews: true },
-        },
-      },
-      // ⭐ NEW: Dynamic sorting
+      include: this.productInclude,
       orderBy,
     });
+  };
+
+  getAllPaginated = async (filters?: {
+    productType?: ProductType;
+    gameId?: number;
+    setId?: number;
+    languageId?: number;
+    rarityId?: number;
+    sealedCategoryId?: number;
+    accessoryCategoryId?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    search?: string;
+
+    // ⭐ Pagination & Sorting
+    page?: number;
+    limit?: number;
+    skip?: number;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+  }) => {
+    const where = this.buildWhere(filters);
+    const orderBy = this.buildOrderBy(filters);
+
+    const limit = filters?.limit ?? 20;
+    const skip = filters?.page !== undefined ? (filters.page - 1) * limit : 0;
+    const effectiveSkip =
+      filters?.page !== undefined ? skip : (filters?.skip ?? 0);
+    const page =
+      filters?.page !== undefined
+        ? filters.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const [products, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where,
+        include: this.productInclude,
+        orderBy,
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    return {
+      products,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   };
 
   // ===========================
