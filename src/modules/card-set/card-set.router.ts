@@ -24,11 +24,22 @@ export class CardSetRouter {
   }
 
   private initializeRoutes = () => {
-    // Public routes
+    // ===========================
+    // PUBLIC ROUTES
+    // ===========================
     this.router.get("/", this.cardSetController.getAll);
+    
+    // ⭐ NEW: Get sets by game (must be before /:slug)
+    this.router.get("/by-game", this.cardSetController.getByGame);
+    
+    // ⭐ NEW: Get sets grouped by language (must be before /:slug)
+    this.router.get("/grouped", this.cardSetController.getGroupedByLanguage);
+    
     this.router.get("/:slug", this.cardSetController.getBySlug);
 
-    // Admin only routes
+    // ===========================
+    // ADMIN ONLY ROUTES
+    // ===========================
     this.router.post(
       "/",
       this.jwtMiddleware.verifyToken(process.env.JWT_SECRET!),

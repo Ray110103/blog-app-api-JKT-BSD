@@ -37,9 +37,9 @@ export class CronService {
       }
     });
 
-    // Auto-end auctions (Every 5 minutes)
+    // ✅ Auto-end auctions (Every 5 minutes)
     cron.schedule("*/5 * * * *", async () => {
-      console.log("🕐 [CRON] Checking for auctions to end...");
+      console.log("\n🕐 [CRON] Checking for auctions to end...");
       try {
         const result = await this.autoEndAuctions();
         console.log(`✅ [CRON] Auction auto-end completed: ${result.message}`);
@@ -50,7 +50,7 @@ export class CronService {
 
     // Detect payment failures (Every hour)
     cron.schedule("0 * * * *", async () => {
-      console.log("🕐 [CRON] Detecting payment failures...");
+      console.log("\n🕐 [CRON] Detecting payment failures...");
       try {
         const result = await this.auctionStatsService.detectPaymentFailures();
         console.log(`✅ [CRON] Payment failure detection completed: ${result.message}`);
@@ -59,9 +59,9 @@ export class CronService {
       }
     });
 
-    // ✅ NEW: Auto-cancel unpaid auction orders (Every 10 minutes)
+    // Auto-cancel unpaid auction orders (Every 10 minutes)
     cron.schedule("*/10 * * * *", async () => {
-      console.log("🕐 [CRON] Checking for unpaid auction orders...");
+      console.log("\n🕐 [CRON] Checking for unpaid auction orders...");
       try {
         const result = await this.autoCancelUnpaidAuctionOrders();
         console.log(`✅ [CRON] Unpaid auction orders check completed: ${result.message}`);
@@ -75,24 +75,30 @@ export class CronService {
     console.log("   - Auto-complete orders: Daily at 2:00 AM");
     console.log("   - Auto-end auctions: Every 5 minutes");
     console.log("   - Detect payment failures: Every hour");
-    console.log("   - Auto-cancel unpaid auction orders: Every 10 minutes");  // ✅ NEW
+    console.log("   - Auto-cancel unpaid auction orders: Every 10 minutes");
   };
 
   /**
-   * Auto-end auctions (24 hours after last bid)
+   * ✅ Auto-end auctions (24 hours after last bid)
+   * 
+   * Logic: Auction ends when lastBidTime + 24h <= now
+   * This is equivalent to: lastBidTime <= (now - 24h)
    */
   autoEndAuctions = async () => {
     const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    console.log(`🔍 Checking for auctions to end (current time: ${now.toISOString()})...`);
+    console.log(`🔍 Checking for auctions to end:`);
+    console.log(`   Current time: ${now.toISOString()}`);
+    console.log(`   Looking for auctions with lastBidTime <= ${twentyFourHoursAgo.toISOString()}`);
 
-    // Find active auctions where 24 hours have passed since last bid
+    // ✅ Find active auctions where 24 hours have passed since last bid
     const auctionsToEnd = await this.prisma.auction.findMany({
       where: {
         status: "ACTIVE",
         lastBidTime: {
-          not: null,
-          lte: new Date(now.getTime() - 24 * 60 * 60 * 1000), // 24 hours ago
+          not: null,  // Only auctions that have received bids
+          lte: twentyFourHoursAgo, // lastBidTime <= 24 hours ago
         },
       },
       include: {
@@ -102,6 +108,7 @@ export class CronService {
             name: true,
           },
         },
+        variant: true,
         bids: {
           orderBy: {
             bidAmount: "desc",
@@ -122,14 +129,31 @@ export class CronService {
 
     console.log(`⚠️ Found ${auctionsToEnd.length} auctions to end`);
 
+    if (auctionsToEnd.length === 0) {
+      return {
+        message: "No auctions to end",
+        count: 0,
+        auctions: [],
+      };
+    }
+
+    const endedAuctions: number[] = [];
+
     for (const auction of auctionsToEnd) {
       try {
-        // Determine winner
+        console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        console.log(`🏁 Ending Auction ID: ${auction.id}`);
+        console.log(`   Product: ${auction.product.name}`);
+        console.log(`   Last Bid: ${auction.lastBidTime?.toISOString()}`);
+        console.log(`   Current Bid: Rp ${Number(auction.currentBid).toLocaleString("id-ID")}`);
+
+        // Determine winner (highest bidder)
         const winner = auction.bids[0];
 
         if (!winner) {
-          // No bids - cancel auction
-          console.log(`❌ Auction ${auction.id} has no bids, cancelling...`);
+          // ❌ No bids - This shouldn't happen since we filter lastBidTime not null
+          // But handle it anyway by canceling
+          console.log(`❌ ERROR: Auction ${auction.id} has lastBidTime but no bids!`);
 
           await this.prisma.$transaction(async (tx) => {
             await tx.auction.update({
@@ -137,7 +161,7 @@ export class CronService {
               data: {
                 status: "CANCELLED",
                 endTime: now,
-                failureReason: "no_bids",
+                failureReason: "no_bids_found",
               },
             });
 
@@ -150,20 +174,25 @@ export class CronService {
             });
           });
 
-          console.log(`✅ Auction ${auction.id} cancelled (no bids)`);
+          console.log(`   ✅ Auction cancelled and stock restored (+${auction.quantity})`);
           continue;
         }
 
-        // Set winner and payment deadline
-        const paymentDeadline = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours from now
+        // ✅ Set winner and payment deadline (48 hours from NOW)
+        const paymentDeadline = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
+        console.log(`   🏆 Winner: ${winner.user.name} (${winner.user.email})`);
+        console.log(`   💰 Winning Bid: Rp ${Number(winner.bidAmount).toLocaleString("id-ID")}`);
+        console.log(`   ⏰ Payment Deadline: ${paymentDeadline.toISOString()}`);
+
+        // Update auction to ENDED status
         await this.prisma.auction.update({
           where: { id: auction.id },
           data: {
             status: "ENDED",
             endTime: now,
             winnerId: winner.userId,
-            paymentDeadline: paymentDeadline,
+            paymentDeadline: paymentDeadline, // ✅ Set payment deadline HERE, not during bidding!
           },
         });
 
@@ -179,26 +208,66 @@ export class CronService {
             paymentDeadline: paymentDeadline,
             auctionUrl: `${process.env.FRONTEND_URL}/auctions/${auction.id}`,
           });
-          console.log(`✅ Winner notification sent to ${winner.user.email}`);
+          console.log(`   ✅ Winner notification sent to ${winner.user.email}`);
         } catch (emailError) {
-          console.error(`❌ Failed to send winner email to ${winner.user.email}:`, emailError);
+          console.error(`   ⚠️ Failed to send winner email:`, emailError);
         }
 
-        console.log(`✅ Auction ${auction.id} ended. Winner: User ${winner.userId}`);
+        // Send notification to other bidders
+        const allBidders = await this.prisma.bid.findMany({
+          where: { auctionId: auction.id },
+          distinct: ["userId"],
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        });
+
+        const otherBidders = allBidders.filter((bid) => bid.userId !== winner.userId);
+        let notifiedCount = 0;
+
+        for (const bid of otherBidders) {
+          try {
+            await this.emailService.sendAuctionEndedNotWon(bid.user.email, {
+              userName: bid.user.name,
+              productName: auction.product.name,
+              finalPrice: Number(winner.bidAmount),
+            });
+            notifiedCount++;
+          } catch (emailError) {
+            console.error(`   ⚠️ Failed to send email to ${bid.user.email}`);
+          }
+        }
+
+        if (otherBidders.length > 0) {
+          console.log(`   ✅ Notified ${notifiedCount}/${otherBidders.length} other bidders`);
+        }
+
+        console.log(`✅ Auction ${auction.id} ended successfully`);
+        endedAuctions.push(auction.id);
+
       } catch (error) {
         console.error(`❌ Failed to end auction ${auction.id}:`, error);
       }
     }
 
+    console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`📊 Summary: Successfully ended ${endedAuctions.length}/${auctionsToEnd.length} auctions`);
+
     return {
-      message: `Ended ${auctionsToEnd.length} auctions`,
-      count: auctionsToEnd.length,
-      auctions: auctionsToEnd.map((a) => a.id),
+      message: `Ended ${endedAuctions.length} auctions`,
+      count: endedAuctions.length,
+      auctions: endedAuctions,
     };
   };
 
   /**
-   * ✅ NEW: Auto-cancel unpaid auction orders
+   * Auto-cancel unpaid auction orders
    * Runs every 10 minutes to check for expired payment deadlines
    */
   autoCancelUnpaidAuctionOrders = async () => {
@@ -247,9 +316,19 @@ export class CronService {
 
     console.log(`⚠️ Found ${auctionOrders.length} unpaid auction orders`);
 
+    if (auctionOrders.length === 0) {
+      return {
+        message: "No unpaid auction orders to cancel",
+        count: 0,
+        orders: [],
+      };
+    }
+
+    const cancelledOrders: string[] = [];
+
     for (const order of auctionOrders) {
       try {
-        console.log(`❌ Cancelling order ${order.orderNumber} (payment deadline exceeded)`);
+        console.log(`\n❌ Cancelling order ${order.orderNumber} (payment deadline exceeded)`);
 
         await this.prisma.$transaction(async (tx) => {
           // 1. Cancel order
@@ -291,7 +370,7 @@ export class CronService {
               },
             });
 
-            console.log(`✅ Stock restored for auction ${auction.id}: +${auction.quantity}`);
+            console.log(`   ✅ Stock restored for auction ${auction.id}: +${auction.quantity}`);
 
             // 4. Record failure
             await tx.auctionFailure.create({
@@ -331,7 +410,7 @@ export class CronService {
               data: { bannedUntil },
             });
 
-            console.log(`⚠️ User ${order.userId} banned until ${bannedUntil.toISOString()}`);
+            console.log(`   ⚠️ User ${order.userId} banned until ${bannedUntil.toISOString()}`);
 
             // Send ban email
             try {
@@ -341,7 +420,7 @@ export class CronService {
                 bannedUntil: bannedUntil,
               });
             } catch (emailError) {
-              console.error(`❌ Failed to send ban email to ${order.user.email}:`, emailError);
+              console.error(`   ⚠️ Failed to send ban email`);
             }
           }
         });
@@ -354,21 +433,23 @@ export class CronService {
             paymentDeadline: order.paymentDeadline!,
             itemCount: order.auctions.length,
           });
-          console.log(`✅ Payment failure email sent to ${order.user.email}`);
+          console.log(`   ✅ Payment failure email sent to ${order.user.email}`);
         } catch (emailError) {
-          console.error(`❌ Failed to send payment failure email to ${order.user.email}:`, emailError);
+          console.error(`   ⚠️ Failed to send payment failure email`);
         }
 
         console.log(`✅ Order ${order.orderNumber} cancelled and auctions restored`);
+        cancelledOrders.push(order.orderNumber);
+
       } catch (error) {
         console.error(`❌ Failed to cancel order ${order.orderNumber}:`, error);
       }
     }
 
     return {
-      message: `Cancelled ${auctionOrders.length} unpaid auction orders`,
-      count: auctionOrders.length,
-      orders: auctionOrders.map((o) => o.orderNumber),
+      message: `Cancelled ${cancelledOrders.length} unpaid auction orders`,
+      count: cancelledOrders.length,
+      orders: cancelledOrders,
     };
   };
 }

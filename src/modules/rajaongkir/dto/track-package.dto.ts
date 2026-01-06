@@ -1,11 +1,15 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsString, IsNotEmpty, IsOptional } from "class-validator";
 
 export class TrackPackageDto {
-  @IsNotEmpty()
   @IsString()
-  waybill!: string; // Nomor resi
+  @IsNotEmpty()
+  waybill!: string;
 
-  @IsNotEmpty()
   @IsString()
-  courier!: string; // "jne", "tiki", "pos"
+  @IsNotEmpty()
+  courier!: string;
+
+  @IsString()
+  @IsOptional()
+  lastPhoneNumber!: string; // ✅ ADDED: Optional last phone number for tracking
 }
