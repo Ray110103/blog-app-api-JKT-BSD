@@ -100,6 +100,30 @@ export class AuctionController {
    */
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const rawPage = req.query.page;
+      const rawLimit = req.query.limit ?? req.query.take;
+      const rawSkip = req.query.skip;
+
+      const hasPagination =
+        rawPage !== undefined || rawLimit !== undefined || rawSkip !== undefined;
+
+      const page = rawPage !== undefined ? Number(rawPage) : undefined;
+      const limit = rawLimit !== undefined ? Number(rawLimit) : undefined;
+      const skip = rawSkip !== undefined ? Number(rawSkip) : undefined;
+
+      if (page !== undefined && (!Number.isFinite(page) || page < 1)) {
+        throw new ApiError("Invalid `page` query param", 400);
+      }
+      if (
+        limit !== undefined &&
+        (!Number.isFinite(limit) || limit < 1 || limit > 100)
+      ) {
+        throw new ApiError("Invalid `limit` query param", 400);
+      }
+      if (skip !== undefined && (!Number.isFinite(skip) || skip < 0)) {
+        throw new ApiError("Invalid `skip` query param", 400);
+      }
+
       const filters: any = {};
 
       if (req.query.status) {
@@ -116,6 +140,22 @@ export class AuctionController {
 
       if (req.query.maxPrice) {
         filters.maxPrice = parseInt(req.query.maxPrice as string);
+      }
+
+      if (hasPagination) {
+        const result = await this.auctionService.getAllPaginated({
+          ...filters,
+          page,
+          limit,
+          skip,
+        });
+
+        res.status(200).json({
+          success: true,
+          data: result.auctions,
+          pagination: result.pagination,
+        });
+        return;
       }
 
       const auctions = await this.auctionService.getAll(filters);
