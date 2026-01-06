@@ -67,6 +67,7 @@ export class ProductController {
       if (hasPagination) {
         const result = await this.productService.getAllPaginated(filters);
         res.status(200).json({
+          success: true,
           data: result.products,
           pagination: result.pagination,
         });
