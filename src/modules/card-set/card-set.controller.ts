@@ -12,11 +12,50 @@ export class CardSetController {
   // ⭐ EXISTING: Get all sets (with optional language filter)
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const rawPage = req.query.page;
+      const rawLimit = req.query.limit ?? req.query.take;
+      const rawSkip = req.query.skip;
+
+      const hasPagination =
+        rawPage !== undefined || rawLimit !== undefined || rawSkip !== undefined;
+
+      const page = rawPage !== undefined ? Number(rawPage) : undefined;
+      const limit = rawLimit !== undefined ? Number(rawLimit) : undefined;
+      const skip = rawSkip !== undefined ? Number(rawSkip) : undefined;
+
+      if (page !== undefined && (!Number.isFinite(page) || page < 1)) {
+        throw new ApiError("Invalid `page` query param", 400);
+      }
+      if (
+        limit !== undefined &&
+        (!Number.isFinite(limit) || limit < 1 || limit > 100)
+      ) {
+        throw new ApiError("Invalid `limit` query param", 400);
+      }
+      if (skip !== undefined && (!Number.isFinite(skip) || skip < 0)) {
+        throw new ApiError("Invalid `skip` query param", 400);
+      }
+
       const filters = {
+        gameId: req.query.gameId ? Number(req.query.gameId) : undefined,
         languageId: req.query.languageId
           ? Number(req.query.languageId)
           : undefined,
       };
+
+      if (hasPagination) {
+        const result = await this.cardSetService.getAllPaginated(filters, {
+          page,
+          limit,
+          skip,
+        });
+        res.status(200).json({
+          success: true,
+          data: result.sets,
+          pagination: result.pagination,
+        });
+        return;
+      }
 
       const sets = await this.cardSetService.getAll(filters);
       res.status(200).json(sets);

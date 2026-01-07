@@ -29,6 +29,65 @@ export class CardRarityService {
     });
   };
 
+  getAllPaginated = async (
+    filters?: { setId?: number; gameId?: number; languageId?: number },
+    pagination?: { page?: number; limit?: number; skip?: number }
+  ) => {
+    const where: any = { isActive: true };
+
+    if (filters?.setId) where.setId = filters.setId;
+
+    if (filters?.gameId || filters?.languageId) {
+      where.set = {
+        ...(filters?.gameId ? { gameId: filters.gameId } : {}),
+        ...(filters?.languageId ? { languageId: filters.languageId } : {}),
+      };
+    }
+
+    const limit = pagination?.limit ?? 20;
+    const skip =
+      pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const include = {
+      set: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          game: { select: { id: true, name: true } },
+          language: { select: { id: true, name: true, code: true } },
+        },
+      },
+    };
+
+    const [rarities, total] = await this.prisma.$transaction([
+      this.prisma.rarity.findMany({
+        where,
+        include,
+        orderBy: { createdAt: "desc" },
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.rarity.count({ where }),
+    ]);
+
+    return {
+      rarities,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  };
+
   getById = async (id: number) => {
     const rarity = await this.prisma.rarity.findFirst({
       where: {

@@ -23,6 +23,44 @@ export class GameService {
     });
   };
 
+  getAllPaginated = async (pagination?: {
+    page?: number;
+    limit?: number;
+    skip?: number;
+  }) => {
+    const limit = pagination?.limit ?? 20;
+    const skip =
+      pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const where = { isActive: true };
+
+    const [games, total] = await this.prisma.$transaction([
+      this.prisma.game.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.game.count({ where }),
+    ]);
+
+    return {
+      games,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  };
+
   getBySlug = async (slug: string) => {
     const game = await this.prisma.game.findFirst({
       where: {
