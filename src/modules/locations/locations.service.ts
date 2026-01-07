@@ -95,6 +95,7 @@ export class LocationsService {
     const envPath = process.env.KODEPOS_DATA_PATH;
     const candidates = [
       envPath,
+      path.resolve(process.cwd(), "data", "kodepos_optimized.json"),
       path.resolve(process.cwd(), "kodepos_optimized.json"),
       path.resolve(process.cwd(), "..", "kodepos_optimized.json"),
     ].filter(Boolean) as string[];

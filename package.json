@@ -7,8 +7,7 @@
     "start": "npm run build && node dist/index.js",
     "dev": "nodemon src/index.ts",
     "postinstall": "prisma generate",
-    "script:update-weights": "ts-node scripts/update-product-weights.ts",
-    "script:import-kodepos": "ts-node scripts/import-kodepos.ts"
+    "script:update-weights": "ts-node scripts/update-product-weights.ts"
   },
   "keywords": [],
   "author": "",

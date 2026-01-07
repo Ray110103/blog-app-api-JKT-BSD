@@ -1,17 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import { LocationsJsonService } from "./locations.service";
-import { LocationsPostgresService } from "./locations.postgres.service";
 import { ApiError } from "../../utils/api-error";
 
 export class LocationsController {
-  private service: { search: LocationsJsonService["search"] };
+  private service: LocationsJsonService;
 
   constructor() {
-    const provider = (process.env.LOCATIONS_PROVIDER || "json").toLowerCase();
-    this.service =
-      provider === "postgres"
-        ? new LocationsPostgresService()
-        : new LocationsJsonService();
+    this.service = new LocationsJsonService();
   }
 
   /**
