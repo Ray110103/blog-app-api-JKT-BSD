@@ -34,6 +34,22 @@ export class ShippingCalculatorService {
     return status === 429 || /daily limit|rate limit|too many/i.test(message);
   }
 
+  private isRajaOngkirUnavailable(error: any) {
+    const status = error?.statusCode || error?.status || error?.response?.status;
+    const message = String(error?.message || "");
+
+    // Komerce sometimes returns 400 with auth-related message.
+    if (/invalid api key|key not found|api key is required/i.test(message)) return true;
+
+    // Missing config thrown from constructor.
+    if (/rajaongkir_api_key is required/i.test(message)) return true;
+
+    // Treat explicit auth statuses as unavailable.
+    if (status === 401 || status === 403) return true;
+
+    return false;
+  }
+
   private log(message: string, meta?: Record<string, unknown>) {
     // Keep logs concise and avoid secrets.
     if (meta) {
@@ -123,8 +139,9 @@ export class ShippingCalculatorService {
       });
       return options;
     } catch (error: any) {
-      if (this.isRateLimited(error)) {
-        this.log("RajaOngkir rate-limited; falling back to biteship", {
+      if (this.isRateLimited(error) || this.isRajaOngkirUnavailable(error)) {
+        const reason = this.isRateLimited(error) ? "rate-limited" : "unavailable";
+        this.log(`RajaOngkir ${reason}; falling back to biteship`, {
           reason: String(error?.message || ""),
         });
         const options = await this.calculateWithBiteship(params);
