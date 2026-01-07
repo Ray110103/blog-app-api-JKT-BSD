@@ -4,14 +4,35 @@ import { CalculateCostDto } from "./dto/calculate-cost.dto";
 import { SearchCityDto } from "./dto/search-city.dto";
 import { TrackPackageDto } from "./dto/track-package.dto";
 
-interface RajaOngkirDestination {
+interface RajaOngkirMeta {
+  code: number;
+  message: string;
+}
+
+interface RajaOngkirApiResponse<T> {
+  meta: RajaOngkirMeta;
+  data: T;
+}
+
+interface RajaOngkirProvince {
   id: number;
-  label: string;
-  city_name: string;
-  province_name: string;
-  district_name: string;
-  subdistrict_name: string;
+  name: string;
+}
+
+interface RajaOngkirCity {
+  id: number;
+  name: string;
   postal_code?: string;
+}
+
+interface RajaOngkirDistrict {
+  id: number;
+  name: string;
+}
+
+interface RajaOngkirSubdistrict {
+  id: number;
+  name: string;
 }
 
 interface RajaOngkirShippingOption {
@@ -32,11 +53,20 @@ export class RajaOngkirService {
     this.baseUrl =
       process.env.RAJAONGKIR_BASE_URL || "https://rajaongkir.komerce.id/api/v1";
 
+    const apiKey =
+      process.env.RAJAONGKIR_API_KEY ||
+      process.env.RAJAONGKIR_SHIPPING_KEY ||
+      process.env.RAJAONGKIR_TRACKING_KEY;
+
+    if (!apiKey) {
+      throw new Error("RAJAONGKIR_API_KEY is required");
+    }
+
     this.shippingClient = axios.create({
       baseURL: this.baseUrl,
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        key: process.env.RAJAONGKIR_SHIPPING_KEY!,
+        key: apiKey,
       },
     });
 
@@ -44,76 +74,34 @@ export class RajaOngkirService {
       baseURL: this.baseUrl,
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        key: process.env.RAJAONGKIR_TRACKING_KEY!,
+        key: apiKey,
       },
     });
   }
 
   /**
-   * Get all provinces (extracted from domestic destinations)
+   * Get all provinces
    */
   getProvinces = async () => {
     try {
-      console.log("📍 Fetching provinces from RajaOngkir API...");
+      const response = await this.shippingClient.get<
+        RajaOngkirApiResponse<RajaOngkirProvince[]>
+      >("/destination/province");
 
-      const searchTerms = [
-        "jakarta",
-        "jawa",
-        "sumatera",
-        "kalimantan",
-        "sulawesi",
-        "bali",
-        "nusa tenggara",
-        "maluku",
-        "papua",
-      ];
-
-      const allDestinations: RajaOngkirDestination[] = [];
-      const provincesMap = new Map<string, any>();
-
-      for (const term of searchTerms) {
-        try {
-          const response = await this.shippingClient.get(
-            "/destination/domestic-destination",
-            {
-              params: {
-                search: term,
-                limit: 500,
-                offset: 0,
-              },
-            }
-          );
-
-          if (response.data.meta.code === 200) {
-            allDestinations.push(...response.data.data);
-            console.log(
-              `✅ Fetched ${response.data.data.length} destinations for "${term}"`
-            );
-          }
-        } catch (error) {
-          console.warn(`⚠️ Failed to fetch data for "${term}"`);
-        }
+      if (response.data.meta.code !== 200) {
+        throw new ApiError(
+          response.data.meta.message || "Failed to fetch provinces",
+          response.data.meta.code
+        );
       }
 
-      allDestinations.forEach((dest) => {
-        if (!provincesMap.has(dest.province_name)) {
-          provincesMap.set(dest.province_name, {
-            province_id: dest.province_name,
-            province: dest.province_name,
-          });
-        }
-      });
-
-      const provinces = Array.from(provincesMap.values()).sort((a, b) =>
-        a.province.localeCompare(b.province)
-      );
-
-      console.log(
-        `✅ Found ${provinces.length} unique provinces from ${allDestinations.length} destinations`
-      );
-      return provinces;
+      return response.data.data
+        .map((p) => ({
+          province_id: p.id,
+          province: p.name,
+        }))
+        .sort((a, b) => a.province.localeCompare(b.province));
     } catch (error: any) {
-      console.error("❌ Error fetching provinces:", error.message);
       if (error instanceof ApiError) throw error;
       throw new ApiError(
         error.response?.data?.meta?.message || "Failed to fetch provinces",
@@ -123,13 +111,13 @@ export class RajaOngkirService {
   };
 
   /**
-   * Get province by name
+   * Get province by ID or name
    */
   getProvinceById = async (provinceName: string) => {
     try {
       const provinces = await this.getProvinces();
       const province = provinces.find(
-        (p) => p.province_id.toLowerCase() === provinceName.toLowerCase()
+        (p) => String(p.province_id).toLowerCase() === provinceName.toLowerCase()
       );
 
       if (!province) {
@@ -147,37 +135,17 @@ export class RajaOngkirService {
   };
 
   /**
-   * Search cities/destinations
-   * ⭐ FIXED: Query-priority search with backend filtering
+   * Search cities by province ID, then optionally filter by query
    */
   searchCities = async (filters: SearchCityDto) => {
     try {
-      console.log("🔍 Searching cities with filters:", filters);
-
-      const params: any = {
-        limit: 500,
-        offset: 0,
-      };
-
-      // ⭐ STRATEGY: If user searching, use query ONLY (ignore province in API search)
-      // Then filter by province after getting results
-      if (filters.query) {
-        params.search = filters.query;
-        console.log(`🔎 Searching by query: "${filters.query}"`);
-      } else if (filters.provinceId) {
-        params.search = filters.provinceId;
-        console.log(`🔎 Searching by province: "${filters.provinceId}"`);
-      } else {
-        params.search = "indonesia";
-        console.log(`🔎 Default search: "indonesia"`);
+      if (!filters.provinceId) {
+        return [];
       }
 
-      const response = await this.shippingClient.get(
-        "/destination/domestic-destination",
-        {
-          params,
-        }
-      );
+      const response = await this.shippingClient.get<
+        RajaOngkirApiResponse<RajaOngkirCity[]>
+      >(`/destination/city/${filters.provinceId}`);
 
       if (response.data.meta.code !== 200) {
         throw new ApiError(
@@ -186,41 +154,88 @@ export class RajaOngkirService {
         );
       }
 
-      let destinations: RajaOngkirDestination[] = response.data.data;
+      const query = (filters.query || "").trim().toLowerCase();
 
-      // ⭐ BACKEND FILTERING: If province filter exists, filter results
-      if (filters.provinceId) {
-        destinations = destinations.filter((dest) =>
-          dest.province_name
-            .toLowerCase()
-            .includes(filters.provinceId!.toLowerCase())
-        );
-        console.log(
-          `✅ Filtered to ${destinations.length} cities in province "${filters.provinceId}"`
-        );
-      }
-
-      // ⭐ Transform to standardized format
-      const cities = destinations.map((dest: RajaOngkirDestination) => ({
-        city_id: dest.id,
-        province_id: dest.province_name,
-        province: dest.province_name,
-        type: this.extractCityType(dest.city_name),
-        city_name: dest.city_name, // ⭐ Use original city_name (already clean!)
-        postal_code: dest.postal_code || "",
-        label: dest.label,
-        district_name: dest.district_name,
-        subdistrict_name: dest.subdistrict_name,
-        full_address: dest.label,
-      }));
-
-      console.log(`✅ Found ${cities.length} cities`);
-      return cities;
+      return response.data.data
+        .filter((c) =>
+          query ? c.name.toLowerCase().includes(query) : true
+        )
+        .map((c) => ({
+          city_id: c.id,
+          province_id: String(filters.provinceId),
+          province: String(filters.provinceId),
+          type: "City",
+          city_name: c.name,
+          postal_code: c.postal_code || "",
+        }));
     } catch (error: any) {
-      console.error("❌ Error searching cities:", error.message);
       if (error instanceof ApiError) throw error;
       throw new ApiError(
         error.response?.data?.meta?.message || "Failed to search cities",
+        error.response?.status || 500
+      );
+    }
+  };
+
+  /**
+   * List districts by city ID, then optionally filter by query
+   */
+  searchDistricts = async ({
+    cityId,
+    query,
+  }: {
+    cityId: number;
+    query?: string;
+  }) => {
+    try {
+      const response = await this.shippingClient.get<
+        RajaOngkirApiResponse<RajaOngkirDistrict[]>
+      >(`/destination/district/${cityId}`);
+
+      if (response.data.meta.code !== 200) {
+        throw new ApiError(
+          response.data.meta.message || "Failed to fetch districts",
+          response.data.meta.code
+        );
+      }
+
+      const q = (query || "").trim().toLowerCase();
+      return response.data.data
+        .filter((d) => (q ? d.name.toLowerCase().includes(q) : true))
+        .map((d) => ({ district_id: d.id, district_name: d.name }));
+    } catch (error: any) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(
+        error.response?.data?.meta?.message || "Failed to search districts",
+        error.response?.status || 500
+      );
+    }
+  };
+
+  /**
+   * List sub-districts by district ID
+   */
+  searchSubdistricts = async (districtId: number) => {
+    try {
+      const response = await this.shippingClient.get<
+        RajaOngkirApiResponse<RajaOngkirSubdistrict[]>
+      >(`/destination/sub-district/${districtId}`);
+
+      if (response.data.meta.code !== 200) {
+        throw new ApiError(
+          response.data.meta.message || "Failed to fetch sub-districts",
+          response.data.meta.code
+        );
+      }
+
+      return response.data.data.map((s) => ({
+        subdistrict_id: s.id,
+        subdistrict_name: s.name,
+      }));
+    } catch (error: any) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(
+        error.response?.data?.meta?.message || "Failed to search sub-districts",
         error.response?.status || 500
       );
     }
@@ -231,65 +246,11 @@ export class RajaOngkirService {
    */
   getCityById = async (cityId: number) => {
     try {
-      console.log("🔍 Fetching city by ID:", cityId);
-
-      const searchTerms = [
-        "jakarta",
-        "jawa",
-        "sumatera",
-        "kalimantan",
-        "sulawesi",
-        "bali",
-        "nusa tenggara",
-        "maluku",
-        "papua",
-      ];
-
-      for (const term of searchTerms) {
-        try {
-          const response = await this.shippingClient.get(
-            "/destination/domestic-destination",
-            {
-              params: {
-                search: term,
-                limit: 500,
-                offset: 0,
-              },
-            }
-          );
-
-          if (response.data.meta.code === 200) {
-            const dest: RajaOngkirDestination | undefined =
-              response.data.data.find(
-                (d: RajaOngkirDestination) => d.id === cityId
-              );
-
-            if (dest) {
-              const city = {
-                city_id: dest.id,
-                province_id: dest.province_name,
-                province: dest.province_name,
-                type: this.extractCityType(dest.city_name),
-                city_name: dest.city_name, // ⭐ Use original city_name
-                postal_code: dest.postal_code || "",
-                label: dest.label,
-                district_name: dest.district_name,
-                subdistrict_name: dest.subdistrict_name,
-                full_address: dest.label,
-              };
-
-              console.log("✅ Found city:", city.city_name);
-              return city;
-            }
-          }
-        } catch (error) {
-          continue;
-        }
-      }
-
-      throw new ApiError("City not found", 404);
+      throw new ApiError(
+        "City lookup by ID is not supported without province context",
+        400
+      );
     } catch (error: any) {
-      console.error("❌ Error fetching city:", error.message);
       if (error instanceof ApiError) throw error;
       throw new ApiError(
         error.response?.data?.meta?.message || "Failed to fetch city",
@@ -303,16 +264,11 @@ export class RajaOngkirService {
    */
   calculateCost = async (data: CalculateCostDto) => {
     try {
-      console.log("💰 Calculating shipping cost:", data);
-
       const formData = new URLSearchParams();
       formData.append("origin", data.originCityId.toString());
       formData.append("destination", data.destinationCityId.toString());
       formData.append("weight", data.weight.toString());
       formData.append("courier", data.courier.toLowerCase());
-
-      console.log("📤 Request endpoint: /calculate/domestic-cost");
-      console.log("📤 Request params:", formData.toString());
 
       const response = await this.shippingClient.post(
         "/calculate/domestic-cost",
