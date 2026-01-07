@@ -300,9 +300,14 @@ export class RajaOngkirService {
       });
 
       if (response.data.meta.code !== 200) {
+        const message =
+          response.data.meta.message || "Failed to search destinations";
+        const mappedStatus = /daily limit|rate limit|too many/i.test(message)
+          ? 429
+          : response.data.meta.code || 500;
         throw new ApiError(
-          response.data.meta.message || "Failed to search destinations",
-          response.data.meta.code
+          message,
+          mappedStatus
         );
       }
 
@@ -458,9 +463,14 @@ export class RajaOngkirService {
       console.log("📥 Response:", response.data);
 
       if (response.data.meta?.code !== 200) {
+        const message =
+          response.data.meta?.message || "Failed to calculate shipping cost";
+        const mappedStatus = /daily limit|rate limit|too many/i.test(message)
+          ? 429
+          : response.data.meta?.code || 500;
         throw new ApiError(
-          response.data.meta?.message || "Failed to calculate shipping cost",
-          response.data.meta?.code || 500
+          message,
+          mappedStatus
         );
       }
 

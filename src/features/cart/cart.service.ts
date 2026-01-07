@@ -332,19 +332,18 @@ export class CartService {
       throw new ApiError("Address not found", 404);
     }
 
-    const originCityId = await this.rajaOngkirService.resolveOriginDestinationId();
-    const destinationCityId = await this.rajaOngkirService.resolveDomesticDestinationId(
-      {
-        postalCode: address.postalCode,
-        cityName: address.cityName,
-        provinceName: address.provinceName,
-        districtName: (address as any).districtName,
-        subdistrictName: (address as any).subdistrictName,
-      }
-    );
-
     let shippingOptions;
     try {
+      const originCityId = await this.rajaOngkirService.resolveOriginDestinationId();
+      const destinationCityId =
+        await this.rajaOngkirService.resolveDomesticDestinationId({
+          postalCode: address.postalCode,
+          cityName: address.cityName,
+          provinceName: address.provinceName,
+          districtName: (address as any).districtName,
+          subdistrictName: (address as any).subdistrictName,
+        });
+
       // Calculate shipping cost using RajaOngkir
       shippingOptions = await this.rajaOngkirService.calculateCost({
         originCityId,
@@ -355,7 +354,8 @@ export class CartService {
     } catch (error: any) {
       const status =
         error?.statusCode || error?.status || error?.response?.status;
-      if (status === 429) {
+      const message = String(error?.message || "");
+      if (status === 429 || /daily limit|rate limit|too many/i.test(message)) {
         // Fallback to Biteship when RajaOngkir is rate-limited
         const courierString = courier.replace(/:/g, ",");
         try {
