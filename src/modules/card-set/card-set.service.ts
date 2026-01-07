@@ -32,6 +32,50 @@ export class CardSetService {
     });
   };
 
+  getAllPaginated = async (
+    filters?: { gameId?: number; languageId?: number },
+    pagination?: { page?: number; limit?: number; skip?: number }
+  ) => {
+    const where: any = { isActive: true };
+
+    if (filters?.gameId) where.gameId = filters.gameId;
+    if (filters?.languageId) where.languageId = filters.languageId;
+
+    const limit = pagination?.limit ?? 20;
+    const skip =
+      pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const [sets, total] = await this.prisma.$transaction([
+      this.prisma.set.findMany({
+        where,
+        include: {
+          game: { select: { id: true, name: true } },
+          language: { select: { id: true, name: true, code: true } },
+        },
+        orderBy: [{ releaseDate: "desc" }, { name: "asc" }],
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.set.count({ where }),
+    ]);
+
+    return {
+      sets,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  };
+
   // ⭐ NEW: Get sets by game (with optional language filter)
   getByGame = async (gameId: number, languageId?: number) => {
     const where: any = {

@@ -1,41 +1,83 @@
 import { PrismaService } from "../../modules/prisma/prisma.service";
 import { ApiError } from "../../utils/api-error";
+import { Prisma } from "../../generated/prisma";
 
 export class WishlistService {
   private prisma: PrismaService;
+  private wishlistInclude: Prisma.WishlistInclude;
 
   constructor() {
     this.prisma = new PrismaService();
+    this.wishlistInclude = {
+      product: {
+        include: {
+          game: true,
+          set: true,
+          language: true,
+          sealedCategory: true,
+          accessoryCategory: true,
+          images: {
+            orderBy: [{ isMain: "desc" }, { createdAt: "asc" }],
+            take: 1, // Only get the main image
+          },
+          variants: {
+            where: { isActive: true },
+            include: {
+              rarity: true,
+              condition: true,
+            },
+          },
+        },
+      },
+    };
   }
 
   // Get all wishlist items for a user
   getAll = async (userId: number) => {
     return await this.prisma.wishlist.findMany({
       where: { userId },
-      include: {
-        product: {
-          include: {
-            game: true,
-            set: true,
-            language: true,
-            sealedCategory: true,
-            accessoryCategory: true,
-            images: {
-              orderBy: [{ isMain: "desc" }, { createdAt: "asc" }],
-              take: 1, // Only get the main image
-            },
-            variants: {
-              where: { isActive: true },
-              include: {
-                rarity: true,
-                condition: true,
-              },
-            },
-          },
-        },
-      },
+      include: this.wishlistInclude,
       orderBy: { createdAt: "desc" },
     });
+  };
+
+  getAllPaginated = async (
+    userId: number,
+    pagination?: { page?: number; limit?: number; skip?: number }
+  ) => {
+    const limit = pagination?.limit ?? 20;
+    const skip =
+      pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const where = { userId };
+    const include = this.wishlistInclude;
+
+    const [wishlist, total] = await this.prisma.$transaction([
+      this.prisma.wishlist.findMany({
+        where,
+        include,
+        orderBy: { createdAt: "desc" },
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.wishlist.count({ where }),
+    ]);
+
+    return {
+      wishlist,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   };
 
   // Add product to wishlist

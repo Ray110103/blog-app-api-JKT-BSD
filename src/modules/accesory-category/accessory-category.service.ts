@@ -25,6 +25,45 @@ export class AccessoryCategoryService {
     });
   };
 
+  getAllPaginated = async (pagination?: {
+    page?: number;
+    limit?: number;
+    skip?: number;
+  }) => {
+    const limit = pagination?.limit ?? 20;
+    const skip =
+      pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const where = { isActive: true };
+
+    const [categories, total] = await this.prisma.$transaction([
+      this.prisma.accessoryCategory.findMany({
+        where,
+        include: { _count: { select: { products: true } } },
+        orderBy: { createdAt: "desc" },
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.accessoryCategory.count({ where }),
+    ]);
+
+    return {
+      categories,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  };
+
   getBySlug = async (slug: string) => {
     const category = await this.prisma.accessoryCategory.findFirst({
       where: {

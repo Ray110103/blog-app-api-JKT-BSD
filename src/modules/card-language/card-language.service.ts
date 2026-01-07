@@ -17,6 +17,44 @@ export class CardLanguageService {
     });
   };
 
+  getAllPaginated = async (pagination?: {
+    page?: number;
+    limit?: number;
+    skip?: number;
+  }) => {
+    const limit = pagination?.limit ?? 20;
+    const skip =
+      pagination?.page !== undefined ? (pagination.page - 1) * limit : 0;
+    const effectiveSkip =
+      pagination?.page !== undefined ? skip : (pagination?.skip ?? 0);
+    const page =
+      pagination?.page !== undefined
+        ? pagination.page
+        : Math.floor(effectiveSkip / limit) + 1;
+
+    const where = { isActive: true };
+
+    const [languages, total] = await this.prisma.$transaction([
+      this.prisma.language.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: effectiveSkip,
+        take: limit,
+      }),
+      this.prisma.language.count({ where }),
+    ]);
+
+    return {
+      languages,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  };
+
   getById = async (id: number) => {
     const language = await this.prisma.language.findFirst({
       where: {
