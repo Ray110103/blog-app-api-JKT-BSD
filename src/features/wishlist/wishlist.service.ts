@@ -1,15 +1,14 @@
 import { PrismaService } from "../../modules/prisma/prisma.service";
 import { ApiError } from "../../utils/api-error";
+import { Prisma } from "../../generated/prisma";
 
 export class WishlistService {
   private prisma: PrismaService;
+  private wishlistInclude: Prisma.WishlistInclude;
 
   constructor() {
     this.prisma = new PrismaService();
-  }
-
-  private getInclude() {
-    return {
+    this.wishlistInclude = {
       product: {
         include: {
           game: true,
@@ -37,7 +36,7 @@ export class WishlistService {
   getAll = async (userId: number) => {
     return await this.prisma.wishlist.findMany({
       where: { userId },
-      include: this.getInclude(),
+      include: this.wishlistInclude,
       orderBy: { createdAt: "desc" },
     });
   };
@@ -57,7 +56,7 @@ export class WishlistService {
         : Math.floor(effectiveSkip / limit) + 1;
 
     const where = { userId };
-    const include = this.getInclude();
+    const include = this.wishlistInclude;
 
     const [wishlist, total] = await this.prisma.$transaction([
       this.prisma.wishlist.findMany({
