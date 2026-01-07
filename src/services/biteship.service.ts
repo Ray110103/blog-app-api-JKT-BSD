@@ -95,6 +95,15 @@ export class BisteshipService {
     return value;
   }
 
+  private getBrowserLikeHeaders() {
+    // The token you shared behaves like a web token and requires origin/referrer.
+    return {
+      accept: "application/json",
+      origin: "https://biteship.com",
+      referer: "https://biteship.com/",
+    } as const;
+  }
+
   /**
    * Resolve area ID by postal code (Biteship).
    */
@@ -112,6 +121,7 @@ export class BisteshipService {
       const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
         headers: {
           Authorization: this.getAuthorizationHeaderValue(),
+          ...this.getBrowserLikeHeaders(),
         },
         params: {
           countries: "ID",
@@ -179,6 +189,7 @@ export class BisteshipService {
           headers: {
             Authorization: this.getAuthorizationHeaderValue(),
             "Content-Type": "application/json",
+            ...this.getBrowserLikeHeaders(),
           },
         }
       );
@@ -214,6 +225,7 @@ export class BisteshipService {
       const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
         headers: {
           Authorization: this.getAuthorizationHeaderValue(),
+          ...this.getBrowserLikeHeaders(),
         },
         params: {
           countries: "ID",
@@ -434,6 +446,7 @@ export class BisteshipService {
           headers: {
             Authorization: this.getAuthorizationHeaderValue(),
             "Content-Type": "application/json",
+            ...this.getBrowserLikeHeaders(),
           },
         }
       );
@@ -494,6 +507,7 @@ export class BisteshipService {
           headers: {
             Authorization: this.getAuthorizationHeaderValue(),
             "Content-Type": "application/json",
+            ...this.getBrowserLikeHeaders(),
           },
         }
       );
