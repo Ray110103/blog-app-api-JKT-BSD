@@ -59,6 +59,30 @@ export class ShippingCalculatorService {
     console.log(`🚚 ${message}`);
   }
 
+  private normalizeEtd(etd: string) {
+    const raw = String(etd || "").trim().replace(/\s+/g, " ");
+    if (!raw) return raw;
+    if (/(day|days|hari|jam|hour|hours)/i.test(raw)) return raw;
+
+    // Handle formats like "1", "2-3", "1 - 2"
+    const numericOnly = raw.replace(/\s/g, "");
+    const match = numericOnly.match(/^(\d+)(?:-(\d+))?$/);
+    if (!match) return raw;
+
+    const start = Number.parseInt(match[1], 10);
+    const end = match[2] ? Number.parseInt(match[2], 10) : start;
+
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return raw;
+
+    const normalizedRange = match[2] ? `${start} - ${end}` : `${start}`;
+    const plural = end > 1 ? "days" : "day";
+    return `${normalizedRange} ${plural}`;
+  }
+
+  private withNormalizedEtd(options: ShippingOption[]) {
+    return options.map((o) => ({ ...o, etd: this.normalizeEtd(o.etd) }));
+  }
+
   private async calculateWithBiteship(params: {
     address: AddressLike;
     weight: number;
@@ -76,14 +100,14 @@ export class ShippingCalculatorService {
         couriers: courierString,
       });
 
-      return pricing.map((p) => ({
+      return this.withNormalizedEtd(pricing.map((p) => ({
         name: p.courier_name,
         code: p.courier_code,
         service: p.courier_service_code,
         description: p.courier_service_name,
         cost: p.price,
         etd: p.shipment_duration_range || p.duration,
-      }));
+      })));
     } catch {
       // Final fallback: legacy postal-code based rates
       const courierResults = await this.biteship.getShippingCost({
@@ -92,7 +116,7 @@ export class ShippingCalculatorService {
         courier: courierString,
       });
 
-      return courierResults.flatMap((c) =>
+      return this.withNormalizedEtd(courierResults.flatMap((c) =>
         c.costs.map((svc) => ({
           name: c.name,
           code: c.code,
@@ -101,7 +125,7 @@ export class ShippingCalculatorService {
           cost: svc.cost[0].value,
           etd: svc.cost[0].etd,
         }))
-      );
+      ));
     }
   }
 
@@ -137,7 +161,7 @@ export class ShippingCalculatorService {
       this.log("Shipping calculated (provider=rajaongkir)", {
         options: options.length,
       });
-      return options;
+      return this.withNormalizedEtd(options);
     } catch (error: any) {
       if (this.isRateLimited(error) || this.isRajaOngkirUnavailable(error)) {
         const reason = this.isRateLimited(error) ? "rate-limited" : "unavailable";
@@ -148,7 +172,7 @@ export class ShippingCalculatorService {
         this.log("Shipping calculated (provider=biteship)", {
           options: options.length,
         });
-        return options;
+        return this.withNormalizedEtd(options);
       }
       this.log("Shipping failed (provider=rajaongkir)", {
         status: error?.statusCode || error?.status || error?.response?.status,
