@@ -25,6 +25,7 @@ import { ReviewRouter } from "./modules/review/review.router";
 import { ComplaintRouter } from "./modules/complaint/complaint.router";
 import { CronService } from "./modules/cron/cron.service";
 import { CronRouter } from "./modules/cron/cron.router";
+import { LocationsRouter } from "./modules/locations/locations.router";
 // ⭐ NEW: Import Auction & Bid Routers
 import { AuctionRouter } from "./modules/auction/auction.router";
 import { BidRouter } from "./modules/bid/bid.router";
@@ -69,6 +70,7 @@ export class App {
     const reviewRouter = new ReviewRouter();
     const complaintRouter = new ComplaintRouter();
     const cronRouter = new CronRouter();
+    const locationsRouter = new LocationsRouter();
     // ⭐ NEW: Initialize Auction & Bid Routers
     const auctionRouter = new AuctionRouter();
     const bidRouter = new BidRouter();
@@ -91,6 +93,7 @@ export class App {
     this.app.use("/shipping", shippingRouter.getRouter());
     this.app.use("/blog", blogRouter.getRouter());
     this.app.use("/rajaongkir", rajaOngkirRouter.getRouter());
+    this.app.use("/locations", locationsRouter.getRouter());
     this.app.use("/reviews", reviewRouter.getRouter());
     this.app.use("/complaints", complaintRouter.getRouter());
     this.app.use("/cron", cronRouter.getRouter());
