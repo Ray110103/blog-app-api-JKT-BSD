@@ -88,7 +88,16 @@ export class ShippingCalculatorService {
     weight: number;
     courier: string;
   }): Promise<ShippingOption[]> {
-    const courierString = params.courier.replace(/:/g, ",");
+    const courierString = Array.from(
+      new Set(
+        params.courier
+          .split(/[:,]/g)
+          .map((c) => c.trim().toLowerCase())
+          .filter(Boolean)
+          // Provider code normalization: RajaOngkir uses `ide`, Biteship uses `idexpress`.
+          .map((c) => (c === "ide" ? "idexpress" : c))
+      )
+    ).join(",");
     const originPostalCode = process.env.ORIGIN_POSTAL_CODE;
     if (!originPostalCode) throw new ApiError("Origin postal code is not configured", 500);
 
