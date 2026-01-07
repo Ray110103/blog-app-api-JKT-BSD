@@ -1,12 +1,17 @@
 import { Request, Response, NextFunction } from "express";
-import { LocationsService } from "./locations.service";
+import { LocationsJsonService } from "./locations.service";
+import { LocationsPostgresService } from "./locations.postgres.service";
 import { ApiError } from "../../utils/api-error";
 
 export class LocationsController {
-  private service: LocationsService;
+  private service: { search: LocationsJsonService["search"] };
 
   constructor() {
-    this.service = new LocationsService();
+    const provider = (process.env.LOCATIONS_PROVIDER || "json").toLowerCase();
+    this.service =
+      provider === "postgres"
+        ? new LocationsPostgresService()
+        : new LocationsJsonService();
   }
 
   /**
@@ -29,4 +34,3 @@ export class LocationsController {
     }
   };
 }
-

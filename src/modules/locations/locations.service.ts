@@ -300,3 +300,5 @@ export class LocationsService {
   };
 }
 
+// Backward-compatible export name (existing imports should migrate to LocationsJsonService)
+export class LocationsJsonService extends LocationsService {}
