@@ -9,17 +9,23 @@ import { RajaOngkirService } from "../../modules/rajaongkir/rajaongkir.service";
 import { EmailService } from "../../modules/mail/email.service";
 import { PreviewAuctionCheckoutDto } from "../../modules/auction/dto/preview-auction-checkout.dto";
 import { CheckoutAuctionsDto } from "../../modules/auction/dto/checkout-auctions.dto";
+import { BisteshipService } from "../../services/biteship.service";
+import { ShippingCalculatorService } from "../../services/shipping-calculator.service";
 
 export class OrderService {
   prisma: PrismaService;
   packagingFee: number;
   rajaOngkirService: RajaOngkirService;
+  biteship: BisteshipService;
+  shippingCalculator: ShippingCalculatorService;
   emailService: EmailService;
 
   constructor() {
     this.prisma = new PrismaService();
     this.packagingFee = parseInt(process.env.PACKAGING_FEE || "2500");
     this.rajaOngkirService = new RajaOngkirService();
+    this.biteship = new BisteshipService();
+    this.shippingCalculator = new ShippingCalculatorService();
     this.emailService = new EmailService();
   }
 
@@ -102,22 +108,15 @@ export class OrderService {
       return sum + weight * item.quantity;
     }, 0);
 
-    // Verify shipping cost with RajaOngkir (resolve destination IDs)
-    const originCityId = await this.rajaOngkirService.resolveOriginDestinationId();
-    const destinationCityId = await this.rajaOngkirService.resolveDomesticDestinationId(
-      {
+    console.log("🔍 Verifying shipping cost (RajaOngkir → Biteship fallback)...");
+    const shippingOptions = await this.shippingCalculator.calculateShippingOptions({
+      address: {
         postalCode: address.postalCode,
         cityName: address.cityName,
         provinceName: address.provinceName,
         districtName: (address as any).districtName,
         subdistrictName: (address as any).subdistrictName,
-      }
-    );
-
-    console.log("🔍 Verifying shipping cost with RajaOngkir...");
-    const shippingOptions = await this.rajaOngkirService.calculateCost({
-      originCityId,
-      destinationCityId,
+      },
       weight: totalWeight,
       courier: data.courierCode,
     });
@@ -320,22 +319,15 @@ export class OrderService {
 
     console.log(`   Payment deadline: ${earliestDeadline.toISOString()}`);
 
-    // 5. Calculate shipping cost with RajaOngkir (resolve destination IDs)
-    const originCityId = await this.rajaOngkirService.resolveOriginDestinationId();
-    const destinationCityId = await this.rajaOngkirService.resolveDomesticDestinationId(
-      {
+    console.log("🚚 Calculating shipping options...");
+    const shippingOptions = await this.shippingCalculator.calculateShippingOptions({
+      address: {
         postalCode: address.postalCode,
         cityName: address.cityName,
         provinceName: address.provinceName,
         districtName: (address as any).districtName,
         subdistrictName: (address as any).subdistrictName,
-      }
-    );
-
-    console.log("🚚 Calculating shipping options...");
-    const shippingOptions = await this.rajaOngkirService.calculateCost({
-      originCityId,
-      destinationCityId,
+      },
       weight: totalWeight,
       courier: data.courier,
     });
@@ -464,22 +456,15 @@ export class OrderService {
       return sum + weight * auction.quantity;
     }, 0);
 
-    // 5. Verify shipping cost with RajaOngkir (resolve destination IDs)
-    const originCityId = await this.rajaOngkirService.resolveOriginDestinationId();
-    const destinationCityId = await this.rajaOngkirService.resolveDomesticDestinationId(
-      {
+    console.log("🔍 Verifying shipping cost (RajaOngkir → Biteship fallback)...");
+    const shippingOptions = await this.shippingCalculator.calculateShippingOptions({
+      address: {
         postalCode: address.postalCode,
         cityName: address.cityName,
         provinceName: address.provinceName,
         districtName: (address as any).districtName,
         subdistrictName: (address as any).subdistrictName,
-      }
-    );
-
-    console.log("🔍 Verifying shipping cost with RajaOngkir...");
-    const shippingOptions = await this.rajaOngkirService.calculateCost({
-      originCityId,
-      destinationCityId,
+      },
       weight: totalWeight,
       courier: data.courierCode,
     });
