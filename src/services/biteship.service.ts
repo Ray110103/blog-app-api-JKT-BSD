@@ -1,5 +1,6 @@
 import axios from "axios";
 import { BITESHIP_API_KEY, BITESHIP_BASE_URL, ORIGIN_POSTAL_CODE } from "../config/env";
+import { ApiError } from "../utils/api-error";
 
 // Types
 interface BisteshipArea {
@@ -80,6 +81,12 @@ export class BisteshipService {
     }
   }
 
+  private ensureConfigured() {
+    if (!this.apiKey || this.apiKey === "your_biteship_api_key_here") {
+      throw new ApiError("BITESHIP_API_KEY is not configured", 500);
+    }
+  }
+
   private getAuthorizationHeaderValue() {
     const value = (this.apiKey || "").trim();
     if (!value) return value;
@@ -92,35 +99,45 @@ export class BisteshipService {
    * Resolve area ID by postal code (Biteship).
    */
   async getAreaIdByPostalCode(postalCode: string): Promise<string> {
+    this.ensureConfigured();
     const normalized = postalCode.toString().trim();
     if (!/^\d{5}$/.test(normalized)) {
-      throw new Error("Invalid postal code");
+      throw new ApiError("Invalid postal code", 400);
     }
 
     const cached = this.areaIdCache.get(normalized);
     if (cached) return cached;
 
-    const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
-      headers: {
-        Authorization: this.getAuthorizationHeaderValue(),
-      },
-      params: {
-        countries: "ID",
-        input: normalized,
-        type: "single",
-      },
-    });
+    try {
+      const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
+        headers: {
+          Authorization: this.getAuthorizationHeaderValue(),
+        },
+        params: {
+          countries: "ID",
+          input: normalized,
+          type: "single",
+        },
+      });
 
-    const areas = response.data.areas as BisteshipArea[];
-    const match =
-      areas.find((a) => String(a.postal_code) === normalized) || areas[0];
+      const areas = response.data.areas as BisteshipArea[];
+      const match =
+        areas.find((a) => String(a.postal_code) === normalized) || areas[0];
 
-    if (!match?.id) {
-      throw new Error("Area not found");
+      if (!match?.id) {
+        throw new ApiError("Destination not found", 400);
+      }
+
+      this.areaIdCache.set(normalized, match.id);
+      return match.id;
+    } catch (error: any) {
+      if (error instanceof ApiError) throw error;
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        "Failed to resolve destination";
+      throw new ApiError(message, error.response?.status || 500);
     }
-
-    this.areaIdCache.set(normalized, match.id);
-    return match.id;
   }
 
   /**
@@ -132,35 +149,52 @@ export class BisteshipService {
     weight: number;
     couriers: string; // comma-separated
   }): Promise<BisteshipCourier[]> {
+    this.ensureConfigured();
     const originAreaId = await this.getAreaIdByPostalCode(params.originPostalCode);
     const destinationAreaId = await this.getAreaIdByPostalCode(
       params.destinationPostalCode
     );
 
-    const response = await axios.post(
-      `${this.baseURL}/v1/rates/couriers?channel=biteship_landing_page`,
-      {
-        origin_area_id: originAreaId,
-        destination_area_id: destinationAreaId,
-        couriers: params.couriers,
-        items: [
-          {
-            weight: params.weight,
-            height: 1,
-            length: 1,
-            width: 1,
-          },
-        ],
-      },
-      {
-        headers: {
-          Authorization: this.getAuthorizationHeaderValue(),
-          "Content-Type": "application/json",
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/v1/rates/couriers?channel=biteship_landing_page`,
+        {
+          origin_area_id: originAreaId,
+          destination_area_id: destinationAreaId,
+          couriers: params.couriers,
+          items: [
+            {
+              weight: params.weight,
+              height: 1,
+              length: 1,
+              width: 1,
+            },
+          ],
         },
-      }
-    );
+        {
+          headers: {
+            Authorization: this.getAuthorizationHeaderValue(),
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-    return response.data.pricing as BisteshipCourier[];
+      if (response.data?.success === false) {
+        throw new ApiError(
+          response.data?.message || "Failed to calculate shipping cost",
+          400
+        );
+      }
+
+      return response.data.pricing as BisteshipCourier[];
+    } catch (error: any) {
+      if (error instanceof ApiError) throw error;
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        "Failed to calculate shipping cost from Biteship";
+      throw new ApiError(message, error.response?.status || 500);
+    }
   }
 
   /**
@@ -168,6 +202,7 @@ export class BisteshipService {
    */
   async getProvinces(): Promise<Province[]> {
     try {
+      this.ensureConfigured();
       const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
         headers: {
           Authorization: this.getAuthorizationHeaderValue(),
@@ -199,8 +234,12 @@ export class BisteshipService {
       
       return provinces;
     } catch (error: any) {
+      if (error instanceof ApiError) throw error;
       console.error("❌ Biteship getProvinces error:", error.response?.data || error.message);
-      throw new Error("Failed to fetch provinces from Biteship");
+      throw new ApiError(
+        error.response?.data?.message || "Failed to fetch provinces from Biteship",
+        error.response?.status || 500
+      );
     }
   }
 
@@ -363,6 +402,7 @@ export class BisteshipService {
     courier: string;
   }): Promise<CourierResult[]> {
     try {
+      this.ensureConfigured();
       const response = await axios.post(
         `${this.baseURL}/v1/rates/couriers`,
         {
@@ -395,8 +435,12 @@ export class BisteshipService {
       // Format to RajaOngkir-like structure
       return this.formatCouriersResponse(couriers);
     } catch (error: any) {
+      if (error instanceof ApiError) throw error;
       console.error("❌ Biteship getShippingCost error:", error.response?.data || error.message);
-      throw new Error("Failed to calculate shipping cost from Biteship");
+      throw new ApiError(
+        error.response?.data?.message || "Failed to calculate shipping cost from Biteship",
+        error.response?.status || 500
+      );
     }
   }
 
@@ -409,6 +453,7 @@ export class BisteshipService {
     couriers?: string[];
   }): Promise<CourierResult[]> {
     try {
+      this.ensureConfigured();
       const couriers = params.couriers || ["jne", "tiki", "pos"];
       const courierString = couriers.join(",");
 
@@ -448,8 +493,12 @@ export class BisteshipService {
       // Format to RajaOngkir-like structure
       return this.formatCouriersResponse(courierResults);
     } catch (error: any) {
+      if (error instanceof ApiError) throw error;
       console.error("❌ Biteship getAllCouriersCost error:", error.response?.data || error.message);
-      throw new Error("Failed to calculate shipping costs from Biteship");
+      throw new ApiError(
+        error.response?.data?.message || "Failed to calculate shipping costs from Biteship",
+        error.response?.status || 500
+      );
     }
   }
 
