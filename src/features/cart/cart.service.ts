@@ -1,14 +1,17 @@
 import { PrismaService } from "../../modules/prisma/prisma.service";
 import { RajaOngkirService } from "../../modules/rajaongkir/rajaongkir.service";
 import { ApiError } from "../../utils/api-error";
+import { BisteshipService } from "../../services/biteship.service";
 
 export class CartService {
   private prisma: PrismaService;
   private rajaOngkirService: RajaOngkirService;
+  private biteship: BisteshipService;
 
   constructor() {
     this.prisma = new PrismaService();
     this.rajaOngkirService = new RajaOngkirService();
+    this.biteship = new BisteshipService();
   }
 
   // ===========================
@@ -329,16 +332,74 @@ export class CartService {
       throw new ApiError("Address not found", 404);
     }
 
-    // Get origin city from env (your store location)
-    const originCityId = parseInt(process.env.ORIGIN_CITY_ID || "17486");
+    const originCityId = await this.rajaOngkirService.resolveOriginDestinationId();
+    const destinationCityId = await this.rajaOngkirService.resolveDomesticDestinationId(
+      {
+        postalCode: address.postalCode,
+        cityName: address.cityName,
+        provinceName: address.provinceName,
+        districtName: (address as any).districtName,
+        subdistrictName: (address as any).subdistrictName,
+      }
+    );
 
-    // Calculate shipping cost using RajaOngkir
-    const shippingOptions = await this.rajaOngkirService.calculateCost({
-      originCityId: originCityId,
-      destinationCityId: address.cityId,
-      weight: cart.summary.totalWeight,
-      courier: courier,
-    });
+    let shippingOptions;
+    try {
+      // Calculate shipping cost using RajaOngkir
+      shippingOptions = await this.rajaOngkirService.calculateCost({
+        originCityId,
+        destinationCityId,
+        weight: cart.summary.totalWeight,
+        courier,
+      });
+    } catch (error: any) {
+      const status =
+        error?.statusCode || error?.status || error?.response?.status;
+      if (status === 429) {
+        // Fallback to Biteship when RajaOngkir is rate-limited
+        const courierString = courier.replace(/:/g, ",");
+        try {
+          const originPostalCode = process.env.ORIGIN_POSTAL_CODE;
+          if (!originPostalCode) throw new ApiError("Origin postal code is not configured", 500);
+
+          const pricing = await this.biteship.getRatesByAreaIds({
+            originPostalCode,
+            destinationPostalCode: address.postalCode,
+            weight: cart.summary.totalWeight,
+            couriers: courierString,
+          });
+
+          shippingOptions = pricing.map((p) => ({
+            name: p.courier_name,
+            code: p.courier_code,
+            service: p.courier_service_code,
+            description: p.courier_service_name,
+            cost: p.price,
+            etd: p.shipment_duration_range || p.duration,
+          }));
+        } catch (biteshipError) {
+          // Final fallback: legacy postal-code based rates
+          const courierResults = await this.biteship.getShippingCost({
+            destinationPostalCode: address.postalCode,
+            weight: cart.summary.totalWeight,
+            courier: courierString,
+          });
+
+          shippingOptions = courierResults.flatMap((c) =>
+            c.costs.map((svc) => ({
+              name: c.name,
+              code: c.code,
+              service: svc.service,
+              description: svc.description,
+              cost: svc.cost[0].value,
+              etd: svc.cost[0].etd,
+            }))
+          );
+        }
+      } else {
+        throw error;
+      }
+    }
 
     // Get recommendations
     const cheapest = this.rajaOngkirService.getCheapestShipping(shippingOptions);
@@ -363,6 +424,8 @@ export class CartService {
         phoneNumber: address.phoneNumber,
         cityId: address.cityId,
         cityName: address.cityName,
+        districtName: (address as any).districtName,
+        subdistrictName: (address as any).subdistrictName,
         provinceName: address.provinceName,
         street: address.street,
         postalCode: address.postalCode,

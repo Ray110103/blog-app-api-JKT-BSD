@@ -44,10 +44,21 @@ interface RajaOngkirShippingOption {
   etd: string;
 }
 
+type RajaOngkirDomesticDestination = {
+  id: number;
+  label?: string;
+  city_name?: string;
+  province_name?: string;
+  postal_code?: string;
+  zip_code?: string;
+};
+
 export class RajaOngkirService {
   private shippingClient: AxiosInstance;
   private trackingClient: AxiosInstance;
   private baseUrl: string;
+  private domesticDestinationCache = new Map<string, number>();
+  private originDestinationIdCache: number | null = null;
 
   constructor() {
     this.baseUrl =
@@ -239,6 +250,175 @@ export class RajaOngkirService {
         error.response?.status || 500
       );
     }
+  };
+
+  private normalizeForMatch(value: string) {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  private buildLocationSearch(address: {
+    postalCode?: string | null;
+    subdistrictName?: string | null;
+    districtName?: string | null;
+    cityName?: string | null;
+    provinceName?: string | null;
+  }) {
+    const parts = [
+      address.postalCode,
+      address.subdistrictName,
+      address.districtName,
+      address.cityName,
+      address.provinceName,
+    ]
+      .filter(Boolean)
+      .map((s) => String(s));
+
+    return parts.join(" ").trim();
+  }
+
+  /**
+   * Search domestic destinations (Komerce RajaOngkir)
+   */
+  searchDomesticDestinations = async (params: {
+    search: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    try {
+      const response = await this.shippingClient.get<
+        RajaOngkirApiResponse<RajaOngkirDomesticDestination[]>
+      >("/destination/domestic-destination", {
+        params: {
+          search: params.search,
+          limit: params.limit ?? 999,
+          offset: params.offset ?? 0,
+        },
+      });
+
+      if (response.data.meta.code !== 200) {
+        throw new ApiError(
+          response.data.meta.message || "Failed to search destinations",
+          response.data.meta.code
+        );
+      }
+
+      return response.data.data || [];
+    } catch (error: any) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(
+        error.response?.data?.meta?.message ||
+          error.response?.data?.message ||
+          "Failed to search destinations",
+        error.response?.status || 500
+      );
+    }
+  };
+
+  /**
+   * Resolve a domestic destination ID for an address.
+   * Prefers exact postal code match when available.
+   */
+  resolveDomesticDestinationId = async (address: {
+    postalCode?: string | null;
+    subdistrictName?: string | null;
+    districtName?: string | null;
+    cityName?: string | null;
+    provinceName?: string | null;
+  }) => {
+    const postalCode = address.postalCode ? String(address.postalCode) : "";
+    const cacheKey = this.normalizeForMatch(
+      [postalCode, address.subdistrictName, address.districtName, address.cityName, address.provinceName]
+        .filter(Boolean)
+        .join("|")
+    );
+
+    const cached = this.domesticDestinationCache.get(cacheKey);
+    if (cached) return cached;
+
+    // Search: postal code is usually the most reliable.
+    const search =
+      postalCode.trim() ||
+      this.buildLocationSearch(address) ||
+      address.cityName ||
+      "";
+
+    if (!search.trim()) {
+      throw new ApiError("Destination not found", 400);
+    }
+
+    const results = await this.searchDomesticDestinations({
+      search,
+      limit: 999,
+      offset: 0,
+    });
+
+    if (!results.length) {
+      throw new ApiError("Destination not found", 400);
+    }
+
+    const normalizedPostal = postalCode.trim();
+    const normalizedCity = address.cityName
+      ? this.normalizeForMatch(address.cityName)
+      : "";
+
+    const withPostalMatch = normalizedPostal
+      ? results.find((r) => String(r.postal_code ?? r.zip_code ?? "") === normalizedPostal)
+      : undefined;
+
+    const withCityMatch =
+      !withPostalMatch && normalizedCity
+        ? results.find((r) => {
+            const label = this.normalizeForMatch(
+              String(r.label ?? r.city_name ?? "")
+            );
+            return label.includes(normalizedCity);
+          })
+        : undefined;
+
+    const chosen = withPostalMatch || withCityMatch || results[0];
+    if (!chosen?.id) {
+      throw new ApiError("Destination not found", 400);
+    }
+
+    this.domesticDestinationCache.set(cacheKey, chosen.id);
+    return chosen.id;
+  };
+
+  /**
+   * Resolve origin destination ID (cached). Uses RAJAONGKIR_ORIGIN_ID first,
+   * otherwise falls back to ORIGIN_CITY_ID. If neither is set, resolves by ORIGIN_POSTAL_CODE.
+   */
+  resolveOriginDestinationId = async () => {
+    if (this.originDestinationIdCache) return this.originDestinationIdCache;
+
+    const fromEnv =
+      process.env.RAJAONGKIR_ORIGIN_ID || process.env.ORIGIN_CITY_ID;
+    const parsed = fromEnv ? Number.parseInt(fromEnv, 10) : NaN;
+    if (Number.isFinite(parsed) && parsed > 0) {
+      this.originDestinationIdCache = parsed;
+      return parsed;
+    }
+
+    const originPostalCode = process.env.ORIGIN_POSTAL_CODE;
+    if (!originPostalCode) {
+      throw new ApiError(
+        "Origin location is not configured (set RAJAONGKIR_ORIGIN_ID or ORIGIN_CITY_ID)",
+        500
+      );
+    }
+
+    const originId = await this.resolveDomesticDestinationId({
+      postalCode: originPostalCode,
+      cityName: process.env.ORIGIN_CITY_NAME,
+      provinceName: process.env.ORIGIN_PROVINCE,
+    });
+
+    this.originDestinationIdCache = originId;
+    return originId;
   };
 
   /**

@@ -102,13 +102,22 @@ export class OrderService {
       return sum + weight * item.quantity;
     }, 0);
 
-    // Verify shipping cost with RajaOngkir
-    const originCityId = parseInt(process.env.ORIGIN_CITY_ID || "17486");
+    // Verify shipping cost with RajaOngkir (resolve destination IDs)
+    const originCityId = await this.rajaOngkirService.resolveOriginDestinationId();
+    const destinationCityId = await this.rajaOngkirService.resolveDomesticDestinationId(
+      {
+        postalCode: address.postalCode,
+        cityName: address.cityName,
+        provinceName: address.provinceName,
+        districtName: (address as any).districtName,
+        subdistrictName: (address as any).subdistrictName,
+      }
+    );
 
     console.log("🔍 Verifying shipping cost with RajaOngkir...");
     const shippingOptions = await this.rajaOngkirService.calculateCost({
-      originCityId: originCityId,
-      destinationCityId: address.cityId,
+      originCityId,
+      destinationCityId,
       weight: totalWeight,
       courier: data.courierCode,
     });
@@ -311,13 +320,22 @@ export class OrderService {
 
     console.log(`   Payment deadline: ${earliestDeadline.toISOString()}`);
 
-    // 5. Calculate shipping cost with RajaOngkir
-    const originCityId = parseInt(process.env.ORIGIN_CITY_ID || "17486");
+    // 5. Calculate shipping cost with RajaOngkir (resolve destination IDs)
+    const originCityId = await this.rajaOngkirService.resolveOriginDestinationId();
+    const destinationCityId = await this.rajaOngkirService.resolveDomesticDestinationId(
+      {
+        postalCode: address.postalCode,
+        cityName: address.cityName,
+        provinceName: address.provinceName,
+        districtName: (address as any).districtName,
+        subdistrictName: (address as any).subdistrictName,
+      }
+    );
 
     console.log("🚚 Calculating shipping options...");
     const shippingOptions = await this.rajaOngkirService.calculateCost({
-      originCityId: originCityId,
-      destinationCityId: address.cityId,
+      originCityId,
+      destinationCityId,
       weight: totalWeight,
       courier: data.courier,
     });
@@ -446,13 +464,22 @@ export class OrderService {
       return sum + weight * auction.quantity;
     }, 0);
 
-    // 5. Verify shipping cost with RajaOngkir
-    const originCityId = parseInt(process.env.ORIGIN_CITY_ID || "17486");
+    // 5. Verify shipping cost with RajaOngkir (resolve destination IDs)
+    const originCityId = await this.rajaOngkirService.resolveOriginDestinationId();
+    const destinationCityId = await this.rajaOngkirService.resolveDomesticDestinationId(
+      {
+        postalCode: address.postalCode,
+        cityName: address.cityName,
+        provinceName: address.provinceName,
+        districtName: (address as any).districtName,
+        subdistrictName: (address as any).subdistrictName,
+      }
+    );
 
     console.log("🔍 Verifying shipping cost with RajaOngkir...");
     const shippingOptions = await this.rajaOngkirService.calculateCost({
-      originCityId: originCityId,
-      destinationCityId: address.cityId,
+      originCityId,
+      destinationCityId,
       weight: totalWeight,
       courier: data.courierCode,
     });

@@ -69,6 +69,7 @@ interface CourierResult {
 export class BisteshipService {
   private baseURL: string;
   private apiKey: string;
+  private areaIdCache = new Map<string, string>();
 
   constructor() {
     this.baseURL = BITESHIP_BASE_URL;
@@ -79,6 +80,89 @@ export class BisteshipService {
     }
   }
 
+  private getAuthorizationHeaderValue() {
+    const value = (this.apiKey || "").trim();
+    if (!value) return value;
+    if (value.toLowerCase().startsWith("bearer ")) return value;
+    if (value.startsWith("eyJ")) return `Bearer ${value}`;
+    return value;
+  }
+
+  /**
+   * Resolve area ID by postal code (Biteship).
+   */
+  async getAreaIdByPostalCode(postalCode: string): Promise<string> {
+    const normalized = postalCode.toString().trim();
+    if (!/^\d{5}$/.test(normalized)) {
+      throw new Error("Invalid postal code");
+    }
+
+    const cached = this.areaIdCache.get(normalized);
+    if (cached) return cached;
+
+    const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
+      headers: {
+        Authorization: this.getAuthorizationHeaderValue(),
+      },
+      params: {
+        countries: "ID",
+        input: normalized,
+        type: "single",
+      },
+    });
+
+    const areas = response.data.areas as BisteshipArea[];
+    const match =
+      areas.find((a) => String(a.postal_code) === normalized) || areas[0];
+
+    if (!match?.id) {
+      throw new Error("Area not found");
+    }
+
+    this.areaIdCache.set(normalized, match.id);
+    return match.id;
+  }
+
+  /**
+   * Calculate courier rates using Biteship area IDs (preferred).
+   */
+  async getRatesByAreaIds(params: {
+    originPostalCode: string;
+    destinationPostalCode: string;
+    weight: number;
+    couriers: string; // comma-separated
+  }): Promise<BisteshipCourier[]> {
+    const originAreaId = await this.getAreaIdByPostalCode(params.originPostalCode);
+    const destinationAreaId = await this.getAreaIdByPostalCode(
+      params.destinationPostalCode
+    );
+
+    const response = await axios.post(
+      `${this.baseURL}/v1/rates/couriers?channel=biteship_landing_page`,
+      {
+        origin_area_id: originAreaId,
+        destination_area_id: destinationAreaId,
+        couriers: params.couriers,
+        items: [
+          {
+            weight: params.weight,
+            height: 1,
+            length: 1,
+            width: 1,
+          },
+        ],
+      },
+      {
+        headers: {
+          Authorization: this.getAuthorizationHeaderValue(),
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return response.data.pricing as BisteshipCourier[];
+  }
+
   /**
    * Get all provinces in Indonesia
    */
@@ -86,7 +170,7 @@ export class BisteshipService {
     try {
       const response = await axios.get(`${this.baseURL}/v1/maps/areas`, {
         headers: {
-          Authorization: this.apiKey,
+          Authorization: this.getAuthorizationHeaderValue(),
         },
         params: {
           countries: "ID",
@@ -300,7 +384,7 @@ export class BisteshipService {
         },
         {
           headers: {
-            Authorization: this.apiKey,
+            Authorization: this.getAuthorizationHeaderValue(),
             "Content-Type": "application/json",
           },
         }
@@ -351,7 +435,7 @@ export class BisteshipService {
         },
         {
           headers: {
-            Authorization: this.apiKey,
+            Authorization: this.getAuthorizationHeaderValue(),
             "Content-Type": "application/json",
           },
         }
