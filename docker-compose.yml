@@ -30,10 +30,8 @@ services:
       PORT: 8000
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-tcg}?schema=public}
       DIRECT_URL: ${DIRECT_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-tcg}?schema=public}
-    command: sh -c "npx prisma migrate deploy && node dist/index.js"
     ports:
       - "8000:8000"
 
 volumes:
   tcg_db_data:
-
