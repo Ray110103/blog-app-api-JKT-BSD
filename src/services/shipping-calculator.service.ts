@@ -34,6 +34,15 @@ export class ShippingCalculatorService {
     return status === 429 || /daily limit|rate limit|too many/i.test(message);
   }
 
+  private log(message: string, meta?: Record<string, unknown>) {
+    // Keep logs concise and avoid secrets.
+    if (meta) {
+      console.log(`🚚 ${message}`, meta);
+      return;
+    }
+    console.log(`🚚 ${message}`);
+  }
+
   private async calculateWithBiteship(params: {
     address: AddressLike;
     weight: number;
@@ -89,6 +98,11 @@ export class ShippingCalculatorService {
     courier: string;
   }): Promise<ShippingOption[]> {
     try {
+      this.log("Calculating shipping (provider=rajaongkir)", {
+        courier: params.courier,
+        weight: params.weight,
+        postalCode: params.address.postalCode,
+      });
       const originCityId = await this.rajaOngkir.resolveOriginDestinationId();
       const destinationCityId = await this.rajaOngkir.resolveDomesticDestinationId({
         postalCode: params.address.postalCode,
@@ -98,18 +112,32 @@ export class ShippingCalculatorService {
         subdistrictName: params.address.subdistrictName ?? undefined,
       });
 
-      return await this.rajaOngkir.calculateCost({
+      const options = await this.rajaOngkir.calculateCost({
         originCityId,
         destinationCityId,
         weight: params.weight,
         courier: params.courier,
       });
+      this.log("Shipping calculated (provider=rajaongkir)", {
+        options: options.length,
+      });
+      return options;
     } catch (error: any) {
       if (this.isRateLimited(error)) {
-        return await this.calculateWithBiteship(params);
+        this.log("RajaOngkir rate-limited; falling back to biteship", {
+          reason: String(error?.message || ""),
+        });
+        const options = await this.calculateWithBiteship(params);
+        this.log("Shipping calculated (provider=biteship)", {
+          options: options.length,
+        });
+        return options;
       }
+      this.log("Shipping failed (provider=rajaongkir)", {
+        status: error?.statusCode || error?.status || error?.response?.status,
+        message: String(error?.message || ""),
+      });
       throw error;
     }
   }
 }
-
