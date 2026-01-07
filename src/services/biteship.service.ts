@@ -132,11 +132,15 @@ export class BisteshipService {
       return match.id;
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
+      const upstreamStatus = error.response?.status;
       const message =
         error.response?.data?.message ||
         error.response?.data?.error ||
         "Failed to resolve destination";
-      throw new ApiError(message, error.response?.status || 500);
+      if (upstreamStatus === 401 || upstreamStatus === 403) {
+        throw new ApiError("Shipping provider authentication failed", 502);
+      }
+      throw new ApiError(message, upstreamStatus || 500);
     }
   }
 
@@ -189,11 +193,15 @@ export class BisteshipService {
       return response.data.pricing as BisteshipCourier[];
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
+      const upstreamStatus = error.response?.status;
       const message =
         error.response?.data?.message ||
         error.response?.data?.error ||
         "Failed to calculate shipping cost from Biteship";
-      throw new ApiError(message, error.response?.status || 500);
+      if (upstreamStatus === 401 || upstreamStatus === 403) {
+        throw new ApiError("Shipping provider authentication failed", 502);
+      }
+      throw new ApiError(message, upstreamStatus || 500);
     }
   }
 
@@ -436,10 +444,14 @@ export class BisteshipService {
       return this.formatCouriersResponse(couriers);
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
+      const upstreamStatus = error.response?.status;
       console.error("❌ Biteship getShippingCost error:", error.response?.data || error.message);
+      if (upstreamStatus === 401 || upstreamStatus === 403) {
+        throw new ApiError("Shipping provider authentication failed", 502);
+      }
       throw new ApiError(
         error.response?.data?.message || "Failed to calculate shipping cost from Biteship",
-        error.response?.status || 500
+        upstreamStatus || 500
       );
     }
   }
@@ -494,10 +506,14 @@ export class BisteshipService {
       return this.formatCouriersResponse(courierResults);
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
+      const upstreamStatus = error.response?.status;
       console.error("❌ Biteship getAllCouriersCost error:", error.response?.data || error.message);
+      if (upstreamStatus === 401 || upstreamStatus === 403) {
+        throw new ApiError("Shipping provider authentication failed", 502);
+      }
       throw new ApiError(
         error.response?.data?.message || "Failed to calculate shipping costs from Biteship",
-        error.response?.status || 500
+        upstreamStatus || 500
       );
     }
   }
