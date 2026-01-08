@@ -139,7 +139,7 @@ export class ShippingCalculatorService {
   }
 
   /**
-   * RajaOngkir first. If rate-limited, fallback to Biteship.
+   * RajaOngkir first. If it fails for any reason, fallback to Biteship.
    */
   async calculateShippingOptions(params: {
     address: AddressLike;
@@ -172,22 +172,36 @@ export class ShippingCalculatorService {
       });
       return this.withNormalizedEtd(options);
     } catch (error: any) {
-      if (this.isRateLimited(error) || this.isRajaOngkirUnavailable(error)) {
-        const reason = this.isRateLimited(error) ? "rate-limited" : "unavailable";
-        this.log(`RajaOngkir ${reason}; falling back to biteship`, {
-          reason: String(error?.message || ""),
-        });
+      this.log("Shipping failed (provider=rajaongkir)", {
+        status: error?.statusCode || error?.status || error?.response?.status,
+        message: String(error?.message || ""),
+      });
+
+      const reason = this.isRateLimited(error)
+        ? "rate-limited"
+        : this.isRajaOngkirUnavailable(error)
+          ? "unavailable"
+          : "error";
+      this.log(`RajaOngkir ${reason}; falling back to biteship`, {
+        reason: String(error?.message || ""),
+      });
+
+      try {
         const options = await this.calculateWithBiteship(params);
         this.log("Shipping calculated (provider=biteship)", {
           options: options.length,
         });
         return this.withNormalizedEtd(options);
+      } catch (fallbackError: any) {
+        this.log("Shipping failed (provider=biteship)", {
+          status:
+            fallbackError?.statusCode ||
+            fallbackError?.status ||
+            fallbackError?.response?.status,
+          message: String(fallbackError?.message || ""),
+        });
+        throw new ApiError("Failed to calculate shipping cost", 502);
       }
-      this.log("Shipping failed (provider=rajaongkir)", {
-        status: error?.statusCode || error?.status || error?.response?.status,
-        message: String(error?.message || ""),
-      });
-      throw error;
     }
   }
 }
