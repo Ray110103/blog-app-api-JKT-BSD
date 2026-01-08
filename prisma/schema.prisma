@@ -360,6 +360,10 @@ model Order {
   accountNumber String?
   accountName   String?
 
+  xenditInvoiceId     String?
+  xenditInvoiceUrl    String?
+  xenditInvoiceStatus String?
+
   subtotal     Decimal @db.Decimal(12, 2)
   shippingCost Decimal @db.Decimal(12, 2)
   packagingFee Decimal @default(2500) @db.Decimal(12, 2)
@@ -443,6 +447,7 @@ enum OrderStatus {
 }
 
 enum PaymentMethod {
+  XENDIT_INVOICE
   BANK_TRANSFER
   COD
   E_WALLET

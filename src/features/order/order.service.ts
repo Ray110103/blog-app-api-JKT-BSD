@@ -12,6 +12,7 @@ import { CheckoutAuctionsDto } from "../../modules/auction/dto/checkout-auctions
 import { BisteshipService } from "../../services/biteship.service";
 import { ShippingCalculatorService } from "../../services/shipping-calculator.service";
 import { Prisma } from "../../generated/prisma";
+import { XenditInvoiceService } from "../../services/xendit-invoice.service";
 
 export class OrderService {
   prisma: PrismaService;
@@ -20,6 +21,7 @@ export class OrderService {
   biteship: BisteshipService;
   shippingCalculator: ShippingCalculatorService;
   emailService: EmailService;
+  xenditInvoice: XenditInvoiceService;
 
   constructor() {
     this.prisma = new PrismaService();
@@ -28,6 +30,7 @@ export class OrderService {
     this.biteship = new BisteshipService();
     this.shippingCalculator = new ShippingCalculatorService();
     this.emailService = new EmailService();
+    this.xenditInvoice = new XenditInvoiceService();
   }
 
   private isOrderNumberCollision(error: unknown) {
@@ -153,6 +156,31 @@ export class OrderService {
     const order = await (async () => {
       for (let attempt = 1; attempt <= 5; attempt++) {
         const orderNumber = await generateOrderNumber();
+        const invoiceDurationSeconds = Number.parseInt(
+          process.env.XENDIT_INVOICE_DURATION_SECONDS || String(24 * 60 * 60),
+          10
+        );
+        const invoice = await this.xenditInvoice.createInvoice({
+          externalId: orderNumber,
+          amount: Number(total),
+          payerEmail: user.email,
+          description: `TCG Store order ${orderNumber}`,
+          invoiceDurationSeconds,
+          successRedirectUrl: `${process.env.FRONTEND_URL || ""}/orders/${orderNumber}`,
+          failureRedirectUrl: `${process.env.FRONTEND_URL || ""}/orders/${orderNumber}`,
+          items: cart.cartItems.map((item) => ({
+            name: item.product.name,
+            quantity: item.quantity,
+            price: Number(item.variant.price),
+            category: item.product.productType,
+            url: `${process.env.FRONTEND_URL || ""}/products/${item.product.slug}`,
+          })),
+          metadata: { orderNumber },
+        });
+        const paymentDeadline = new Date(
+          Date.now() + invoiceDurationSeconds * 1000
+        );
+
         console.log("📦 Creating order:", orderNumber);
 
         try {
@@ -168,8 +196,11 @@ export class OrderService {
                 courierServiceName: data.courierServiceName,
                 estimatedDelivery: data.estimatedDelivery || selectedShipping.etd,
                 weight: totalWeight,
-                paymentMethod: "BANK_TRANSFER",
+                paymentMethod: "XENDIT_INVOICE",
                 paymentStatus: "UNPAID",
+                xenditInvoiceId: invoice.id,
+                xenditInvoiceUrl: invoice.invoiceUrl,
+                xenditInvoiceStatus: String(invoice.status || "PENDING"),
                 subtotal,
                 shippingCost: data.shippingCost,
                 packagingFee: this.packagingFee,
@@ -178,6 +209,7 @@ export class OrderService {
                 total,
                 status: "PENDING",
                 notes: data.notes,
+                paymentDeadline,
               },
             });
 
@@ -523,7 +555,6 @@ export class OrderService {
       throw new ApiError("Payment deadline not set for auctions", 400);
     }
 
-    // 7. Generate order number
     console.log(`   Auctions: ${data.auctionIds.join(", ")}`);
     console.log(`   Total: Rp ${total.toLocaleString("id-ID")}`);
 
@@ -531,6 +562,27 @@ export class OrderService {
     const order = await (async () => {
       for (let attempt = 1; attempt <= 5; attempt++) {
         const orderNumber = await generateOrderNumber();
+        const invoiceDurationSeconds = Math.max(
+          60,
+          Math.floor((earliestDeadline.getTime() - Date.now()) / 1000)
+        );
+        const invoice = await this.xenditInvoice.createInvoice({
+          externalId: orderNumber,
+          amount: Number(total),
+          payerEmail: user.email,
+          description: `TCG Store auction order ${orderNumber}`,
+          invoiceDurationSeconds,
+          successRedirectUrl: `${process.env.FRONTEND_URL || ""}/orders/${orderNumber}`,
+          failureRedirectUrl: `${process.env.FRONTEND_URL || ""}/orders/${orderNumber}`,
+          items: auctions.map((auction) => ({
+            name: auction.product.name,
+            quantity: auction.quantity,
+            price: Number(auction.currentBid),
+            url: `${process.env.FRONTEND_URL || ""}/auctions/${auction.id}`,
+          })),
+          metadata: { orderNumber, auctionIds: data.auctionIds },
+        });
+
         console.log("📦 Creating order from auctions:", orderNumber);
 
         try {
@@ -546,8 +598,11 @@ export class OrderService {
                 courierServiceName: data.courierServiceName,
                 estimatedDelivery: data.estimatedDelivery || selectedShipping.etd,
                 weight: totalWeight,
-                paymentMethod: "BANK_TRANSFER",
+                paymentMethod: "XENDIT_INVOICE",
                 paymentStatus: "UNPAID",
+                xenditInvoiceId: invoice.id,
+                xenditInvoiceUrl: invoice.invoiceUrl,
+                xenditInvoiceStatus: String(invoice.status || "PENDING"),
                 subtotal,
                 shippingCost: data.shippingCost,
                 packagingFee: this.packagingFee,
@@ -687,6 +742,8 @@ export class OrderService {
       orderNumber: order.orderNumber,
       status: order.status,
       paymentStatus: order.paymentStatus,
+      xenditInvoiceUrl: (order as any).xenditInvoiceUrl,
+      xenditInvoiceStatus: (order as any).xenditInvoiceStatus,
       paymentDeadline: order.paymentDeadline, // ✅ NEW
       total: Number(order.total),
       itemCount: order._count.orderItems,
@@ -769,6 +826,8 @@ export class OrderService {
       orderNumber: order.orderNumber,
       status: order.status,
       paymentStatus: order.paymentStatus,
+      xenditInvoiceUrl: (order as any).xenditInvoiceUrl,
+      xenditInvoiceStatus: (order as any).xenditInvoiceStatus,
       paymentDeadline: order.paymentDeadline,
       total: Number(order.total),
       itemCount: order._count.orderItems,
@@ -862,6 +921,8 @@ export class OrderService {
       orderNumber: order.orderNumber,
       status: order.status,
       paymentStatus: order.paymentStatus,
+      xenditInvoiceUrl: (order as any).xenditInvoiceUrl,
+      xenditInvoiceStatus: (order as any).xenditInvoiceStatus,
       paymentDeadline: order.paymentDeadline, // ✅ NEW
       subtotal: Number(order.subtotal),
       shippingCost: Number(order.shippingCost),

@@ -30,6 +30,7 @@ import { LocationsRouter } from "./modules/locations/locations.router";
 // ⭐ NEW: Import Auction & Bid Routers
 import { AuctionRouter } from "./modules/auction/auction.router";
 import { BidRouter } from "./modules/bid/bid.router";
+import { XenditWebhookRouter } from "./modules/webhook/xendit-webhook.router";
 
 export class App {
   app: Express;
@@ -76,6 +77,7 @@ export class App {
     // ⭐ NEW: Initialize Auction & Bid Routers
     const auctionRouter = new AuctionRouter();
     const bidRouter = new BidRouter();
+    const xenditWebhookRouter = new XenditWebhookRouter();
 
     this.app.use("/auth", authRouter.getRouter());
     this.app.use("/profile", profileRouter.getRouter());
@@ -102,6 +104,7 @@ export class App {
     this.app.use("/cron", cronRouter.getRouter());
     this.app.use("/auctions", auctionRouter.getRouter());
     this.app.use("/bids", bidRouter.getRouter());
+    this.app.use("/webhooks/xendit", xenditWebhookRouter.getRouter());
   }
 
   private handleError() {
