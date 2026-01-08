@@ -18,6 +18,7 @@ import { WishlistRouter } from "./features/wishlist/wishlist.router";
 import { AddressRouter } from "./features/address/address.router";
 import { OrderRouter } from "./features/order/order.router";
 import { AdminOrderRouter } from "./features/admin/admin-order.router";
+import { AdminUserRouter } from "./features/admin/admin-user.router";
 import { ShippingRouter } from "./features/shipping/shipping.router";
 import { BlogRouter } from "./features/blog/blog.router";
 import { RajaOngkirRouter } from "./modules/rajaongkir/rajaongkir.router";
@@ -64,6 +65,7 @@ export class App {
     const addressRouter = new AddressRouter();
     const orderRouter = new OrderRouter();
     const adminOrderRouter = new AdminOrderRouter();
+    const adminUserRouter = new AdminUserRouter();
     const shippingRouter = new ShippingRouter();
     const blogRouter = new BlogRouter();
     const rajaOngkirRouter = new RajaOngkirRouter();
@@ -90,6 +92,7 @@ export class App {
     this.app.use("/addresses", addressRouter.getRouter());
     this.app.use("/orders", orderRouter.getRouter());
     this.app.use("/admin/orders", adminOrderRouter.getRouter());
+    this.app.use("/admin/users", adminUserRouter.getRouter());
     this.app.use("/shipping", shippingRouter.getRouter());
     this.app.use("/blog", blogRouter.getRouter());
     this.app.use("/rajaongkir", rajaOngkirRouter.getRouter());
