@@ -62,6 +62,15 @@ export class ShippingCalculatorService {
   private normalizeEtd(etd: string) {
     const raw = String(etd || "").trim().replace(/\s+/g, " ");
     if (!raw) return raw;
+
+    // Same-day providers sometimes return "0 day" / "0 days" / "0-0 day".
+    // Show a clearer estimate instead of "0 days".
+    const zeroDay = raw
+      .toLowerCase()
+      .replace(/\s/g, "")
+      .match(/^0(?:-0)?(?:day|days)$/);
+    if (zeroDay) return "24 hours";
+
     if (/(day|days|hari|jam|hour|hours)/i.test(raw)) return raw;
 
     // Handle formats like "1", "2-3", "1 - 2"
