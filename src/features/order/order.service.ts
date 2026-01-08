@@ -11,6 +11,7 @@ import { PreviewAuctionCheckoutDto } from "../../modules/auction/dto/preview-auc
 import { CheckoutAuctionsDto } from "../../modules/auction/dto/checkout-auctions.dto";
 import { BisteshipService } from "../../services/biteship.service";
 import { ShippingCalculatorService } from "../../services/shipping-calculator.service";
+import { Prisma } from "../../generated/prisma";
 
 export class OrderService {
   prisma: PrismaService;
@@ -27,6 +28,14 @@ export class OrderService {
     this.biteship = new BisteshipService();
     this.shippingCalculator = new ShippingCalculatorService();
     this.emailService = new EmailService();
+  }
+
+  private isOrderNumberCollision(error: unknown) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+    if (error.code !== "P2002") return false;
+    const target = (error.meta as { target?: unknown } | undefined)?.target;
+    if (Array.isArray(target)) return target.includes("orderNumber");
+    return target === "orderNumber";
   }
 
   /**
@@ -140,71 +149,85 @@ export class OrderService {
 
     const total = subtotal + data.shippingCost + this.packagingFee;
 
-    // 6. Generate order number
-    const orderNumber = await generateOrderNumber();
+    // 6. Create order with transaction (+ retry on unique orderNumber collision)
+    const order = await (async () => {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        const orderNumber = await generateOrderNumber();
+        console.log("📦 Creating order:", orderNumber);
 
-    console.log("📦 Creating order:", orderNumber);
+        try {
+          return await this.prisma.$transaction(async (tx) => {
+            const newOrder = await tx.order.create({
+              data: {
+                orderNumber,
+                userId,
+                addressId: data.addressId,
+                courier: data.courier,
+                courierCode: data.courierCode,
+                courierService: data.courierService,
+                courierServiceName: data.courierServiceName,
+                estimatedDelivery: data.estimatedDelivery || selectedShipping.etd,
+                weight: totalWeight,
+                paymentMethod: "BANK_TRANSFER",
+                paymentStatus: "UNPAID",
+                subtotal,
+                shippingCost: data.shippingCost,
+                packagingFee: this.packagingFee,
+                adminFee: 0,
+                discount: 0,
+                total,
+                status: "PENDING",
+                notes: data.notes,
+              },
+            });
 
-    // 7. Create order with transaction
-    const order = await this.prisma.$transaction(async (tx) => {
-      const newOrder = await tx.order.create({
-        data: {
-          orderNumber,
-          userId,
-          addressId: data.addressId,
-          courier: data.courier,
-          courierCode: data.courierCode,
-          courierService: data.courierService,
-          courierServiceName: data.courierServiceName,
-          estimatedDelivery: data.estimatedDelivery || selectedShipping.etd,
-          weight: totalWeight,
-          paymentMethod: "BANK_TRANSFER",
-          paymentStatus: "UNPAID",
-          subtotal,
-          shippingCost: data.shippingCost,
-          packagingFee: this.packagingFee,
-          adminFee: 0,
-          discount: 0,
-          total,
-          status: "PENDING",
-          notes: data.notes,
-        },
-      });
+            for (const item of cart.cartItems) {
+              await tx.orderItem.create({
+                data: {
+                  orderId: newOrder.id,
+                  productId: item.productId,
+                  variantId: item.variantId,
+                  quantity: item.quantity,
+                  price: item.variant.price,
+                  subtotal: Number(item.variant.price) * item.quantity,
+                  sourceType: "REGULAR", // ✅ Regular order
+                },
+              });
 
-      for (const item of cart.cartItems) {
-        await tx.orderItem.create({
-          data: {
-            orderId: newOrder.id,
-            productId: item.productId,
-            variantId: item.variantId,
-            quantity: item.quantity,
-            price: item.variant.price,
-            subtotal: Number(item.variant.price) * item.quantity,
-            sourceType: "REGULAR", // ✅ Regular order
-          },
-        });
+              await tx.productVariant.update({
+                where: { id: item.variantId },
+                data: { stock: { decrement: item.quantity } },
+              });
+            }
 
-        await tx.productVariant.update({
-          where: { id: item.variantId },
-          data: { stock: { decrement: item.quantity } },
-        });
+            await tx.orderStatusHistory.create({
+              data: {
+                orderId: newOrder.id,
+                status: "PENDING",
+                notes: "Order created",
+                createdBy: `user-${userId}`,
+              },
+            });
+
+            await tx.cartItem.deleteMany({
+              where: { cartId: cart.id },
+            });
+
+            return newOrder;
+          });
+        } catch (error) {
+          if (this.isOrderNumberCollision(error) && attempt < 5) {
+            console.warn(
+              `⚠️ Order number collision (attempt ${attempt}); retrying...`
+            );
+            continue;
+          }
+          throw error;
+        }
       }
 
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: newOrder.id,
-          status: "PENDING",
-          notes: "Order created",
-          createdBy: `user-${userId}`,
-        },
-      });
-
-      await tx.cartItem.deleteMany({
-        where: { cartId: cart.id },
-      });
-
-      return newOrder;
-    });
+      throw new ApiError("Failed to generate unique order number", 500);
+    })();
 
     console.log("✅ Order created successfully:", order.orderNumber);
 
@@ -501,77 +524,93 @@ export class OrderService {
     }
 
     // 7. Generate order number
-    const orderNumber = await generateOrderNumber();
-
-    console.log("📦 Creating order from auctions:", orderNumber);
     console.log(`   Auctions: ${data.auctionIds.join(", ")}`);
     console.log(`   Total: Rp ${total.toLocaleString("id-ID")}`);
 
     // 8. Create order with transaction
-    const order = await this.prisma.$transaction(async (tx) => {
-      const newOrder = await tx.order.create({
-        data: {
-          orderNumber,
-          userId,
-          addressId: data.addressId,
-          courier: data.courier,
-          courierCode: data.courierCode,
-          courierService: data.courierService,
-          courierServiceName: data.courierServiceName,
-          estimatedDelivery: data.estimatedDelivery || selectedShipping.etd,
-          weight: totalWeight,
-          paymentMethod: "BANK_TRANSFER",
-          paymentStatus: "UNPAID",
-          subtotal,
-          shippingCost: data.shippingCost,
-          packagingFee: this.packagingFee,
-          adminFee: 0,
-          discount: 0,
-          total,
-          status: "PENDING",
-          notes: data.notes,
-          paymentDeadline: earliestDeadline, // ✅ NEW
-        },
-      });
+    const order = await (async () => {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        const orderNumber = await generateOrderNumber();
+        console.log("📦 Creating order from auctions:", orderNumber);
 
-      // Create OrderItems (one per auction)
-      for (const auction of auctions) {
-        await tx.orderItem.create({
-          data: {
-            orderId: newOrder.id,
-            productId: auction.product.id,
-            variantId: auction.variant.id,
-            quantity: auction.quantity,
-            price: auction.currentBid,
-            subtotal: Number(auction.currentBid) * auction.quantity,
-            sourceType: "AUCTION", // ✅ NEW
-            sourceId: auction.id, // ✅ NEW
-          },
-        });
+        try {
+          return await this.prisma.$transaction(async (tx) => {
+            const newOrder = await tx.order.create({
+              data: {
+                orderNumber,
+                userId,
+                addressId: data.addressId,
+                courier: data.courier,
+                courierCode: data.courierCode,
+                courierService: data.courierService,
+                courierServiceName: data.courierServiceName,
+                estimatedDelivery: data.estimatedDelivery || selectedShipping.etd,
+                weight: totalWeight,
+                paymentMethod: "BANK_TRANSFER",
+                paymentStatus: "UNPAID",
+                subtotal,
+                shippingCost: data.shippingCost,
+                packagingFee: this.packagingFee,
+                adminFee: 0,
+                discount: 0,
+                total,
+                status: "PENDING",
+                notes: data.notes,
+                paymentDeadline: earliestDeadline, // ✅ NEW
+              },
+            });
+
+            // Create OrderItems (one per auction)
+            for (const auction of auctions) {
+              await tx.orderItem.create({
+                data: {
+                  orderId: newOrder.id,
+                  productId: auction.product.id,
+                  variantId: auction.variant.id,
+                  quantity: auction.quantity,
+                  price: auction.currentBid,
+                  subtotal: Number(auction.currentBid) * auction.quantity,
+                  sourceType: "AUCTION", // ✅ NEW
+                  sourceId: auction.id, // ✅ NEW
+                },
+              });
+            }
+
+            // Link auctions to order
+            await tx.auction.updateMany({
+              where: {
+                id: { in: data.auctionIds },
+              },
+              data: {
+                orderId: newOrder.id,
+              },
+            });
+
+            // Create status history
+            await tx.orderStatusHistory.create({
+              data: {
+                orderId: newOrder.id,
+                status: "PENDING",
+                notes: `Order created from ${auctions.length} auction(s)`,
+                createdBy: `user-${userId}`,
+              },
+            });
+
+            return newOrder;
+          });
+        } catch (error) {
+          if (this.isOrderNumberCollision(error) && attempt < 5) {
+            console.warn(
+              `⚠️ Order number collision (attempt ${attempt}); retrying...`
+            );
+            continue;
+          }
+          throw error;
+        }
       }
 
-      // Link auctions to order
-      await tx.auction.updateMany({
-        where: {
-          id: { in: data.auctionIds },
-        },
-        data: {
-          orderId: newOrder.id,
-        },
-      });
-
-      // Create status history
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: newOrder.id,
-          status: "PENDING",
-          notes: `Order created from ${auctions.length} auction(s)`,
-          createdBy: `user-${userId}`,
-        },
-      });
-
-      return newOrder;
-    });
+      throw new ApiError("Failed to generate unique order number", 500);
+    })();
 
     console.log("✅ Order created successfully:", order.orderNumber);
 
