@@ -956,7 +956,7 @@ export class OrderService {
         productId: item.productId,
         variantId: item.variantId,
         productName: item.product.name,
-        productSlug: item.product.slug,
+        productSlug: item.product.slug || 'product-not-found',
         productImage: item.product.thumbnail,
         productType: item.product.productType,
         variantInfo: {
