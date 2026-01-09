@@ -44,11 +44,13 @@
     "handlebars": "^4.7.8",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "nanoid": "^3.3.8",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.5",
     "passport": "^0.7.0",
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "xendit-node": "^7.0.0"
   }
 }

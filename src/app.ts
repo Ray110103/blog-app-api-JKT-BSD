@@ -18,6 +18,7 @@ import { WishlistRouter } from "./features/wishlist/wishlist.router";
 import { AddressRouter } from "./features/address/address.router";
 import { OrderRouter } from "./features/order/order.router";
 import { AdminOrderRouter } from "./features/admin/admin-order.router";
+import { AdminUserRouter } from "./features/admin/admin-user.router";
 import { ShippingRouter } from "./features/shipping/shipping.router";
 import { BlogRouter } from "./features/blog/blog.router";
 import { RajaOngkirRouter } from "./modules/rajaongkir/rajaongkir.router";
@@ -25,9 +26,11 @@ import { ReviewRouter } from "./modules/review/review.router";
 import { ComplaintRouter } from "./modules/complaint/complaint.router";
 import { CronService } from "./modules/cron/cron.service";
 import { CronRouter } from "./modules/cron/cron.router";
+import { LocationsRouter } from "./modules/locations/locations.router";
 // ⭐ NEW: Import Auction & Bid Routers
 import { AuctionRouter } from "./modules/auction/auction.router";
 import { BidRouter } from "./modules/bid/bid.router";
+import { XenditWebhookRouter } from "./modules/webhook/xendit-webhook.router";
 
 export class App {
   app: Express;
@@ -63,15 +66,18 @@ export class App {
     const addressRouter = new AddressRouter();
     const orderRouter = new OrderRouter();
     const adminOrderRouter = new AdminOrderRouter();
+    const adminUserRouter = new AdminUserRouter();
     const shippingRouter = new ShippingRouter();
     const blogRouter = new BlogRouter();
     const rajaOngkirRouter = new RajaOngkirRouter();
     const reviewRouter = new ReviewRouter();
     const complaintRouter = new ComplaintRouter();
     const cronRouter = new CronRouter();
+    const locationsRouter = new LocationsRouter();
     // ⭐ NEW: Initialize Auction & Bid Routers
     const auctionRouter = new AuctionRouter();
     const bidRouter = new BidRouter();
+    const xenditWebhookRouter = new XenditWebhookRouter();
 
     this.app.use("/auth", authRouter.getRouter());
     this.app.use("/profile", profileRouter.getRouter());
@@ -88,14 +94,17 @@ export class App {
     this.app.use("/addresses", addressRouter.getRouter());
     this.app.use("/orders", orderRouter.getRouter());
     this.app.use("/admin/orders", adminOrderRouter.getRouter());
+    this.app.use("/admin/users", adminUserRouter.getRouter());
     this.app.use("/shipping", shippingRouter.getRouter());
     this.app.use("/blog", blogRouter.getRouter());
     this.app.use("/rajaongkir", rajaOngkirRouter.getRouter());
+    this.app.use("/locations", locationsRouter.getRouter());
     this.app.use("/reviews", reviewRouter.getRouter());
     this.app.use("/complaints", complaintRouter.getRouter());
     this.app.use("/cron", cronRouter.getRouter());
     this.app.use("/auctions", auctionRouter.getRouter());
     this.app.use("/bids", bidRouter.getRouter());
+    this.app.use("/webhooks/xendit", xenditWebhookRouter.getRouter());
   }
 
   private handleError() {
