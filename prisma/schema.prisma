@@ -18,10 +18,6 @@ model User {
   pictureProfile String?
   isVerified     Boolean  @default(false)
 
-  provider   String?
-  providerId String?
-  avatar     String?
-
   pendingEmail           String?
   emailVerificationToken String?
   emailTokenExpiry       DateTime?
