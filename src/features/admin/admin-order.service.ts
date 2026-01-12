@@ -220,10 +220,6 @@ export class AdminOrderService {
         email: order.user.email,
       },
       total: Number(order.total),
-      paymentProof: order.paymentProof,
-      bankName: order.bankName,
-      accountNumber: order.accountNumber,
-      accountName: order.accountName,
       paidAt: order.paidAt?.toISOString(),
     }));
   };
@@ -292,10 +288,6 @@ export class AdminOrderService {
         data: {
           status: "PAYMENT_REJECTED",
           paymentStatus: "FAILED",
-          paymentProof: null,
-          bankName: null,
-          accountNumber: null,
-          accountName: null,
           paidAt: null,
           adminNotes: body.reason,
         },
@@ -663,15 +655,15 @@ export class AdminOrderService {
       },
       previous: query.compareWithPrevious
         ? {
-            revenue: Math.round(previousRevenue),
-            orders: previousOrderCount,
-          }
+          revenue: Math.round(previousRevenue),
+          orders: previousOrderCount,
+        }
         : null,
       growth: query.compareWithPrevious
         ? {
-            percentage: Math.round(growthPercentage * 100) / 100,
-            absolute: Math.round(currentRevenue - previousRevenue),
-          }
+          percentage: Math.round(growthPercentage * 100) / 100,
+          absolute: Math.round(currentRevenue - previousRevenue),
+        }
         : null,
       breakdown: revenueBreakdown.length > 0 ? revenueBreakdown : null,
       topProducts,

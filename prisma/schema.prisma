@@ -351,10 +351,6 @@ model Order {
 
   paymentMethod PaymentMethod @default(BANK_TRANSFER)
   paymentStatus PaymentStatus @default(UNPAID)
-  paymentProof  String?
-  bankName      String?
-  accountNumber String?
-  accountName   String?
 
   xenditInvoiceId     String?
   xenditInvoiceUrl    String?
