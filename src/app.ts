@@ -2,6 +2,7 @@ import cors from "cors";
 import express, { Express } from "express";
 import "reflect-metadata";
 import { PORT } from "./config/env";
+import { initSentry, sentryErrorHandler, sentryRequestHandler } from "./config/sentry";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import { AuthRouter } from "./modules/auth/auth.router";
 import { ProfileRouter } from "./modules/profile/profile.router";
@@ -39,6 +40,7 @@ export class App {
   constructor() {
     this.app = express();
     this.cronService = new CronService();
+    initSentry(this.app);
     this.configure();
     this.routes();
     this.handleError();
@@ -46,6 +48,9 @@ export class App {
   }
 
   private configure() {
+    const sentryReq = sentryRequestHandler();
+    if (sentryReq) this.app.use(sentryReq);
+
     this.app.use(cors());
     this.app.use(express.json());
   }
@@ -108,6 +113,8 @@ export class App {
   }
 
   private handleError() {
+    const sentryErr = sentryErrorHandler();
+    if (sentryErr) this.app.use(sentryErr);
     this.app.use(errorMiddleware);
   }
 

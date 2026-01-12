@@ -1,9 +1,7 @@
 import { ApiError } from "../../utils/api-error";
 import { generateOrderNumber } from "../../utils/order-number.util";
 import { CreateOrderDto } from "./dto/create-order.dto";
-import { UploadPaymentProofDto } from "./dto/upload-payment-proof.dto";
 import { CancelOrderDto } from "./dto/cancel-order.dto";
-import { uploadPaymentProof } from "../../utils/file-upload.util";
 import { PrismaService } from "../../modules/prisma/prisma.service";
 import { RajaOngkirService } from "../../modules/rajaongkir/rajaongkir.service";
 import { EmailService } from "../../modules/mail/email.service";
@@ -937,10 +935,6 @@ export class OrderService {
       estimatedDelivery: order.estimatedDelivery,
       weight: order.weight,
       paymentMethod: order.paymentMethod,
-      paymentProof: order.paymentProof,
-      bankName: order.bankName,
-      accountNumber: order.accountNumber,
-      accountName: order.accountName,
       address: {
         id: order.address.id,
         label: order.address.label,
@@ -956,7 +950,7 @@ export class OrderService {
         productId: item.productId,
         variantId: item.variantId,
         productName: item.product.name,
-        productSlug: item.product.slug,
+        productSlug: item.product.slug || 'product-not-found',
         productImage: item.product.thumbnail,
         productType: item.product.productType,
         variantInfo: {
@@ -987,97 +981,7 @@ export class OrderService {
     };
   };
 
-  /**
-   * Upload payment proof
-   */
-  uploadPaymentProof = async (
-    userId: number,
-    orderNumber: string,
-    data: UploadPaymentProofDto,
-    file: Express.Multer.File
-  ) => {
-    const order = await this.prisma.order.findFirst({
-      where: {
-        orderNumber,
-        userId,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
 
-    if (!order) {
-      throw new ApiError("Order not found", 404);
-    }
-
-    if (order.status !== "PENDING") {
-      throw new ApiError(
-        "Payment proof can only be uploaded for pending orders",
-        400
-      );
-    }
-
-    if (order.paymentProof) {
-      throw new ApiError("Payment proof already uploaded", 400);
-    }
-
-    console.log("📤 Uploading payment proof to Cloudinary...");
-    const uploadResult = await uploadPaymentProof(file);
-
-    const updatedOrder = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.order.update({
-        where: { id: order.id },
-        data: {
-          paymentProof: uploadResult.secure_url,
-          bankName: data.bankName,
-          accountNumber: data.accountNumber,
-          accountName: data.accountName,
-          status: "WAITING_FOR_CONFIRMATION",
-          paymentStatus: "PENDING_VERIFICATION",
-          paidAt: new Date(),
-        },
-      });
-
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: order.id,
-          status: "WAITING_FOR_CONFIRMATION",
-          notes: `Payment proof uploaded. Bank: ${data.bankName}`,
-          createdBy: `user-${userId}`,
-        },
-      });
-
-      return updated;
-    });
-
-    console.log("✅ Payment proof uploaded successfully");
-
-    try {
-      await this.emailService.sendPaymentUploadedToAdmin({
-        orderNumber: order.orderNumber,
-        customerName: order.user.name,
-        total: Number(order.total),
-        bankName: data.bankName,
-        accountNumber: data.accountNumber,
-        accountName: data.accountName,
-        paymentProof: uploadResult.secure_url,
-      });
-      console.log("✅ Payment notification email sent to admin");
-    } catch (emailError) {
-      console.error(
-        "❌ Failed to send payment notification email:",
-        emailError
-      );
-    }
-
-    return await this.getById(userId, orderNumber);
-  };
 
   /**
    * Cancel order (customer only - if status is PENDING) - UPDATED
