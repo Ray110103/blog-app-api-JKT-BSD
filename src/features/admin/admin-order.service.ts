@@ -288,13 +288,11 @@ export class AdminOrderService {
     const orderCounts = {
       total: 0,
       pending: 0,
-      waitingConfirmation: 0,
       confirmed: 0,
       processing: 0,
       shipped: 0,
       completed: 0,
       cancelled: 0,
-      paymentRejected: 0,
     };
 
     statusCounts.forEach((item) => {
@@ -304,9 +302,6 @@ export class AdminOrderService {
       switch (item.status) {
         case "PENDING":
           orderCounts.pending = count;
-          break;
-        case "WAITING_FOR_CONFIRMATION":
-          orderCounts.waitingConfirmation = count;
           break;
         case "CONFIRMED":
           orderCounts.confirmed = count;
@@ -322,9 +317,6 @@ export class AdminOrderService {
           break;
         case "CANCELLED":
           orderCounts.cancelled = count;
-          break;
-        case "PAYMENT_REJECTED":
-          orderCounts.paymentRejected = count;
           break;
       }
     });
