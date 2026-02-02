@@ -7,6 +7,7 @@
     "start": "npm run build && node dist/index.js",
     "dev": "nodemon src/index.ts",
     "postinstall": "prisma generate",
+    "db:seed": "ts-node prisma/seed.ts",
     "script:update-weights": "ts-node scripts/update-product-weights.ts"
   },
   "keywords": [],
